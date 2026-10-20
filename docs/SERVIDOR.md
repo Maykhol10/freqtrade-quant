@@ -168,7 +168,7 @@ El watchdog silencia una alerta repetida durante 2 horas, así que un problema p
 
 ### systemd (opcional)
 
-`restart: unless-stopped` ya devuelve el bot tras un reinicio de la VM. La unidad en [`systemd/freqtrade-quant.service`](../systemd/freqtrade-quant.service) añade control con `systemctl`, estado y logs en journald:
+`restart: unless-stopped` ya devuelve el bot tras un reinicio de la VM. La unidad en [`systemd/freqtrade-quant.service`](https://github.com/Maykhol10/freqtrade-quant/blob/main/systemd/freqtrade-quant.service) añade control con `systemctl`, estado y logs en journald:
 
 ```bash
 sudo cp systemd/freqtrade-quant.service /etc/systemd/system/

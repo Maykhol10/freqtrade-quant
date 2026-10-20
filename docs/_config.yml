@@ -1,0 +1,22 @@
+# Configuración de GitHub Pages. El sitio se publica desde esta carpeta (/docs).
+title: freqtrade-quant
+description: Validación cuantitativa de una estrategia de trading cripto en Freqtrade
+
+# Tema soportado nativamente por GitHub Pages: no necesita build propio
+theme: jekyll-theme-minimal
+
+# jekyll-relative-links reescribe los enlaces .md entre documentos a su .html
+# equivalente. Sin esto, [VALIDACION.md](VALIDACION.md) daría 404 en el sitio
+# mientras funciona en GitHub. Con esto, los dos funcionan.
+plugins:
+  - jekyll-relative-links
+
+relative_links:
+  enabled: true
+  collections: false
+
+lang: es
+show_downloads: false
+
+exclude:
+  - _config.yml
