@@ -163,8 +163,27 @@ class TrendRiderV1(IStrategy):
                                    space="buy", optimize=True)
 
     # No optimizables: restricciones de riesgo, no parametros.
-    STOP_CAP = 0.25        # nunca arriesgar mas del 25% en una operacion
-    STOP_FLOOR = 0.03      # nunca pegar el stop a menos del 3%
+    STOP_CAP = 0.25        # el stop nunca se aleja mas del 25% de la entrada
+    STOP_FLOOR = 0.03      # ni se pega a menos del 3%
+
+    # Riesgo por operacion como fraccion del capital.
+    #
+    # Es la correccion del problema que destapo la primera medicion: con stake
+    # fijo de 8 USDT y stop variable, el riesgo por operacion variaba con la
+    # volatilidad del par. Ocho operaciones tocaron el tope del 25% y se
+    # comieron 15.3 USDT: el 38% de una cuenta de 40.
+    #
+    # La solucion ortodoxa no es estrechar el stop -- eso convertiria el
+    # chandelier en un stop fijo y eliminaria la adaptacion a volatilidad, que
+    # es justo lo que lo hace funcionar. Es invertir la relacion: el stop lo
+    # dicta la volatilidad y el TAMANO se calcula para que la perdida maxima
+    # sea siempre la misma fraccion del capital.
+    #
+    #     tamano = (capital x riesgo) / distancia_al_stop
+    #
+    # 2% es el limite superior de la practica estandar. Con 4 posiciones
+    # abiertas, el peor caso simultaneo es un 8% del capital.
+    RISK_PER_TRADE = 0.02
 
     # ------------------------------------------------------------------ #
     def informative_pairs(self):
@@ -242,6 +261,60 @@ class TrendRiderV1(IStrategy):
         # Sin salida por senal a proposito. El stop chandelier decide.
         dataframe["exit_long"] = 0
         return dataframe
+
+    # ------------------------------------------------------------------ #
+    def custom_stake_amount(self, pair: str, current_time: datetime,
+                            current_rate: float, proposed_stake: float,
+                            min_stake: Optional[float], max_stake: float,
+                            leverage: float, entry_tag: Optional[str],
+                            side: str, **kwargs) -> float:
+        """
+        Tamano de posicion por riesgo fijo, no por stake fijo.
+
+            tamano = (capital x RISK_PER_TRADE) / distancia_al_stop
+
+        La distancia al stop es la misma que usara custom_stoploss() en la
+        primera evaluacion: 3xATR diario, acotada entre STOP_FLOOR y STOP_CAP.
+        Asi la perdida si salta el stop es ~RISK_PER_TRADE del capital, sea el
+        par BTC (ATR diario ~4%) o SOL (~7.5%).
+
+        Consecuencia que conviene ver, no esconder: en los pares mas volatiles
+        el tamano calculado cae por debajo del minimo que acepta Binance (~5
+        USDT de nocional). Freqtrade descarta esas entradas automaticamente, y
+        eso es lo correcto -- significa que **con 40 USDT no se puede tomar esa
+        operacion con riesgo aceptable**. La alternativa seria tomarla con
+        riesgo excesivo, que es lo que hacia la version anterior.
+        """
+        dataframe, _ = self.dp.get_analyzed_dataframe(pair, self.timeframe)
+        if dataframe is None or dataframe.empty:
+            return proposed_stake
+
+        atr = dataframe[f"atr_{self.inf_timeframe}"].iat[-1]
+        if atr is None or atr <= 0 or current_rate <= 0:
+            return proposed_stake
+
+        # Distancia relativa al stop, con los mismos limites que custom_stoploss
+        stop_dist = (self.atr_mult.value * atr) / current_rate
+        stop_dist = max(min(stop_dist, self.STOP_CAP), self.STOP_FLOOR)
+
+        # Capital de referencia. En backtest y en dry-run wallets refleja el
+        # equity actual, asi que el riesgo escala con la cuenta.
+        capital = None
+        if self.wallets is not None:
+            try:
+                capital = self.wallets.get_total_stake_amount()
+            except Exception:
+                capital = None
+        if not capital or capital <= 0:
+            capital = float(self.config.get("available_capital")
+                            or self.config.get("dry_run_wallet") or 0) or proposed_stake
+
+        stake = (capital * self.RISK_PER_TRADE) / stop_dist
+
+        # No pasarse del maximo disponible. El minimo NO se fuerza: si queda
+        # por debajo, Freqtrade descarta la entrada, que es el comportamiento
+        # deseado (ver docstring).
+        return min(stake, max_stake)
 
     # ------------------------------------------------------------------ #
     def custom_stoploss(self, pair: str, trade: Trade, current_time: datetime,
