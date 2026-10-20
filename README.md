@@ -24,15 +24,23 @@ lo que se está construyendo es el proceso.
 ```
 freqtrade-quant/
 ├── docker-compose.yml           Servicio del bot (dry-run, API en loopback)
+├── Makefile                     Atajos de todo: make help
 ├── .env.example                 Plantilla de secretos -> copiar a .env
-├── .gitignore                   Bloquea .env, datos, sqlite, resultados
-├── Makefile                     Atajos de los comandos más usados
+├── .gitignore / .gitattributes  Bloquea .env · fuerza LF para Linux
 ├── docs/
+│   ├── SERVIDOR.md              Despliegue en Azure, firewall, diagnóstico
 │   ├── COMANDOS.md              Comandos exactos, paso a paso
 │   ├── VALIDACION.md            Partición temporal + plantilla de métricas
 │   └── CHECKLIST_REAL.md        Qué debe cumplirse antes de usar dinero real
 ├── scripts/
-│   └── daily_report.sh          Resumen diario a Telegram (cron)
+│   ├── install.sh               Bootstrap idempotente del servidor
+│   ├── preflight.sh             12 comprobaciones antes de arrancar
+│   ├── daily_report.sh          Resumen diario a Telegram
+│   ├── watchdog.sh              Vigilancia cada 15 min + alertas
+│   ├── backup.sh                Respaldo rotativo de db y config
+│   └── cron-install.sh          Instala las tareas programadas
+├── systemd/
+│   └── freqtrade-quant.service  Unidad systemd (opcional)
 └── user_data/
     ├── config.json              Config de Freqtrade (dry_run: true)
     └── strategies/
@@ -115,15 +123,26 @@ Comandos literales: [`docs/COMANDOS.md`](docs/COMANDOS.md)
 git clone https://github.com/Maykhol10/freqtrade-quant.git /opt/freqtrade-quant
 cd /opt/freqtrade-quant
 
-cp .env.example .env && chmod 600 .env
-nano .env                          # token de Telegram, chat_id, password de la API
-sudo chown -R 1000:1000 user_data  # el contenedor corre como uid 1000
-
-docker compose pull
-make download                      # o el comando completo de docs/COMANDOS.md
-make audit                         # lookahead + recursive  <- mirar ANTES de backtestear
+./scripts/install.sh      # Docker, .env con secretos generados, permisos, imagen
+make download             # datos 1h + 4h desde 2023-01-01
+make audit                # lookahead + recursive  <- BLOQUEANTE
 make backtest-in
 ```
+
+`install.sh` es idempotente y termina verificando que las estrategias **importan de
+verdad** dentro de la imagen de Freqtrade, no solo que el archivo existe. No arranca
+el bot ni descarga datos: esas decisiones siguen siendo tuyas.
+
+Cuando decidas poner el dry-run en marcha:
+
+```bash
+make preflight       # 12 comprobaciones; no debe salir ninguna FALLA
+make up
+make cron-install    # resumen diario, vigilancia cada 15 min, respaldo semanal
+```
+
+Despliegue completo, tamaño de VM, reglas del NSG y tabla de diagnóstico:
+[`docs/SERVIDOR.md`](docs/SERVIDOR.md). Todos los atajos: `make help`.
 
 ---
 

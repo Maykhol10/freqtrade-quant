@@ -11,11 +11,20 @@ OUT_SAMPLE := 20250101-
 
 COMMON := --config $(CONFIG) --strategy $(STRAT) --enable-protections --cache none
 
-.PHONY: help pull download download-detail audit lookahead recursive \
-        backtest-in backtest-out stress benchmark-in benchmark-out \
-        walkforward analysis hyperopt up down logs restart report clean-db
+.PHONY: help install preflight verify pull download download-detail \
+        audit lookahead recursive backtest-in backtest-out stress \
+        benchmark-in benchmark-out walkforward analysis hyperopt \
+        up down logs restart report watchdog backup \
+        cron-install cron-remove cron-show systemd-install clean-db
 
 help:
+	@echo "Servidor"
+	@echo "  make install          Bootstrap: Docker, .env, permisos, imagen"
+	@echo "  make verify           Comprueba que las estrategias cargan"
+	@echo "  make preflight        12 comprobaciones antes de arrancar"
+	@echo "  make cron-install     Resumen diario + vigilancia + respaldo"
+	@echo "  make systemd-install  Unidad systemd (opcional)"
+	@echo ""
 	@echo "Datos"
 	@echo "  make download         Descarga 1h y 4h desde 2023-01-01"
 	@echo "  make download-detail  Descarga 5m (para --timeframe-detail)"
@@ -36,6 +45,39 @@ help:
 	@echo "Dry-run"
 	@echo "  make up / down / logs / restart"
 	@echo "  make report           Resumen diario a Telegram (manual)"
+	@echo "  make watchdog         Vigilancia a mano"
+	@echo "  make backup           Respaldo a mano"
+
+# ------------------------------------------------------------------ #
+#  Servidor
+# ------------------------------------------------------------------ #
+install:
+	./scripts/install.sh
+
+preflight:
+	./scripts/preflight.sh
+
+verify:
+	@echo "=== estrategias que Freqtrade consigue importar ==="
+	$(FT) list-strategies --config $(CONFIG)
+	@echo "=== config.json aceptada por Freqtrade? ==="
+	@$(FT) show-config --config $(CONFIG) >/dev/null && echo "  OK" || echo "  RECHAZADA"
+
+cron-install:
+	./scripts/cron-install.sh
+
+cron-remove:
+	./scripts/cron-install.sh --remove
+
+cron-show:
+	./scripts/cron-install.sh --show
+
+systemd-install:
+	sudo cp systemd/freqtrade-quant.service /etc/systemd/system/
+	sudo sed -i "s/__USER__/$(USER)/;s#__ROOT__#$(CURDIR)#" \
+		/etc/systemd/system/freqtrade-quant.service
+	sudo systemctl daemon-reload
+	@echo "Instalada. Activar con: sudo systemctl enable --now freqtrade-quant"
 
 pull:
 	docker compose pull
@@ -132,6 +174,12 @@ restart:
 
 report:
 	./scripts/daily_report.sh
+
+watchdog:
+	./scripts/watchdog.sh
+
+backup:
+	./scripts/backup.sh
 
 clean-db:
 	@echo "Esto borra el historial del dry-run. Ctrl-C para abortar."

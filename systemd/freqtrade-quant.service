@@ -1,0 +1,50 @@
+# Unidad systemd opcional.
+#
+# `restart: unless-stopped` en docker-compose.yml ya hace que el bot vuelva solo
+# tras un reinicio de la VM. Esta unidad aporta otra cosa: control explicito con
+# systemctl, estado y logs unificados en journald, y arranque ordenado respecto
+# a la red y a docker.service.
+#
+# Instalacion (ajusta User y WorkingDirectory a tu caso):
+#
+#   sudo cp systemd/freqtrade-quant.service /etc/systemd/system/
+#   sudo sed -i "s/__USER__/$USER/" /etc/systemd/system/freqtrade-quant.service
+#   sudo sed -i "s#__ROOT__#$PWD#" /etc/systemd/system/freqtrade-quant.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now freqtrade-quant
+#
+# Uso:
+#   sudo systemctl status freqtrade-quant
+#   sudo systemctl restart freqtrade-quant
+#   sudo systemctl stop freqtrade-quant        # detiene el bot
+#   journalctl -u freqtrade-quant -f
+#
+# Si instalas esta unidad, gestiona el bot SOLO con systemctl: usar
+# `docker compose down` por detras deja a systemd creyendo que sigue activo.
+
+[Unit]
+Description=Freqtrade dry-run (TrendPullbackV1) via docker compose
+Documentation=file://__ROOT__/docs/SERVIDOR.md
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=__USER__
+WorkingDirectory=__ROOT__
+
+# Sin limite: la primera descarga de la imagen puede tardar
+TimeoutStartSec=0
+
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStop=/usr/bin/docker compose down
+ExecReload=/usr/bin/docker compose restart
+
+# Reintentar si docker aun no estaba listo al arrancar la VM
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
