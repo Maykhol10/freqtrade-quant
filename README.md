@@ -61,7 +61,7 @@ por volatilidad real (ATR).
 | Pares | BTC/USDT, ETH/USDT |
 | Timeframe | 1h (filtro de tendencia en 4h vía informative pairs) |
 | Filtro de tendencia | 4h: EMA50 > EMA200 **y** close > EMA200 |
-| Entrada | 1h: RSI(14) cruza al alza 35 **y** close > EMA50 |
+| Entrada | 1h: **setup** RSI(14) tocó <35 en las últimas 12 velas · **gatillo** el cierre cruza al alza la EMA50 |
 | Salida | RSI > 70 · close < EMA50 · ROI · stop |
 | Stop | ATR(14) × 2 desde la entrada, acotado entre −1.5% y −5% |
 | Trailing | Se activa en +3%, bloquea ~+1% |

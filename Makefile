@@ -135,14 +135,12 @@ recursive:
 # ------------------------------------------------------------------ #
 backtest-in:
 	$(FT) backtesting $(COMMON) --timerange $(IN_SAMPLE) \
-		--timeframe-detail 5m --breakdown month \
-		--export trades --export-filename user_data/backtest_results/in_sample.json
+		--timeframe-detail 5m --breakdown month --export trades
 
 backtest-out:
 	@echo ">>> OUT-OF-SAMPLE. No ajustar nada despues de ver esto. <<<"
 	$(FT) backtesting $(COMMON) --timerange $(OUT_SAMPLE) \
-		--timeframe-detail 5m --breakdown month \
-		--export trades --export-filename user_data/backtest_results/out_of_sample.json
+		--timeframe-detail 5m --breakdown month --export trades
 
 stress:
 	@for FEE in 0.001 0.0015 0.002; do \
@@ -155,14 +153,12 @@ stress:
 benchmark-in:
 	$(FT) backtesting --config $(CONFIG) --strategy BuyAndHoldBTC \
 		--pairs BTC/USDT --max-open-trades 1 --stake-amount unlimited \
-		--timerange $(IN_SAMPLE) --cache none \
-		--export trades --export-filename user_data/backtest_results/buyhold_in.json
+		--timerange $(IN_SAMPLE) --cache none --export trades
 
 benchmark-out:
 	$(FT) backtesting --config $(CONFIG) --strategy BuyAndHoldBTC \
 		--pairs BTC/USDT --max-open-trades 1 --stake-amount unlimited \
-		--timerange $(OUT_SAMPLE) --cache none \
-		--export trades --export-filename user_data/backtest_results/buyhold_out.json
+		--timerange $(OUT_SAMPLE) --cache none --export trades
 
 walkforward:
 	@for R in 20230201-20230801 20230801-20240201 20240201-20240801 \

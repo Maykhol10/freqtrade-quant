@@ -7,9 +7,11 @@ title: freqtrade-quant
 Validación cuantitativa de una estrategia de trading cripto en [Freqtrade](https://www.freqtrade.io/).
 Binance **spot**, solo largos, sin apalancamiento.
 
-> **Estado: boceto. Ninguna métrica medida todavía.**
-> Nada de este proyecto debe operar con dinero real hasta completar la
-> [checklist](CHECKLIST_REAL.md) completa.
+> **Estado: medido. Veredicto: no hay ventaja.**
+> El backtest in-sample da **−4,84%** frente al **+304%** de comprar y mantener
+> BTC en el mismo periodo. La ventaja bruta de la señal es de 0,008% por
+> operación contra un coste de 0,200%: la comisión es **24 veces** la ventaja.
+> Detalle completo en [RESULTADOS.md](RESULTADOS.md).
 
 [Código fuente en GitHub](https://github.com/Maykhol10/freqtrade-quant){: .btn }
 
@@ -34,6 +36,7 @@ construye de verdad es el proceso.
 | **[SERVIDOR.md](SERVIDOR.md)** | Desplegar en una VM de Azure: tamaño, firewall, swap, systemd, diagnóstico |
 | **[COMANDOS.md](COMANDOS.md)** | Los 10 pasos con comandos literales: datos, auditoría, backtest, dry-run |
 | **[VALIDACION.md](VALIDACION.md)** | Partición temporal, plantilla de métricas y cómo no engañarse leyéndolas |
+| **[RESULTADOS.md](RESULTADOS.md)** | **Lo que se ha medido y el veredicto. Empieza por aquí.** |
 | **[CHECKLIST_REAL.md](CHECKLIST_REAL.md)** | Las 5 condiciones que deben cumplirse antes de usar dinero real |
 
 ### Dashboard de análisis
@@ -47,8 +50,8 @@ make backtest-in && make benchmark-in
 make dashboard          # -> docs/report.html
 ```
 
-Aparecerá en `report.html` junto a esta página. **Todavía no existe: ningún
-backtest se ha ejecutado.** El generador es
+**[Ver el dashboard del backtest in-sample](report.html)** — ya generado con
+datos reales. El generador es
 [`scripts/report.py`](https://github.com/Maykhol10/freqtrade-quant/blob/main/scripts/report.py),
 solo librería estándar de Python, y devuelve código de salida 1 si algún
 criterio bloqueante falla — así que sirve tal cual en un script o en CI.
@@ -66,7 +69,7 @@ por volatilidad real (ATR).
 | Pares | BTC/USDT, ETH/USDT |
 | Timeframe | 1h, con filtro de tendencia en 4h (informative pairs) |
 | Filtro de tendencia | 4h: EMA50 > EMA200 **y** close > EMA200 |
-| Entrada | 1h: RSI(14) cruza al alza 35 **y** close > EMA50 |
+| Entrada | 1h: **setup** RSI(14) tocó <35 en las últimas 12 velas · **gatillo** el cierre cruza al alza la EMA50 |
 | Salida | RSI > 70 · close < EMA50 · ROI · stop |
 | Stop | ATR(14) × 2 desde la entrada, acotado entre −1.5% y −5% |
 | Trailing | Se activa en +3%, bloquea ~+1% |

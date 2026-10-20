@@ -15,8 +15,13 @@ las estrategias de reversion a la media.
 Logica
 ------
 Filtro de tendencia (4h):  EMA50 > EMA200  Y  close > EMA200
-Entrada (1h):              RSI(14) cruza AL ALZA 35  Y  close > EMA50(1h)
-Salida (1h):               RSI(14) > 70  O  close < EMA50(1h)  O  ROI  O  stop
+Entrada (1h):              SETUP   RSI(14) toco < 35 en las ultimas 12 velas
+                           GATILLO el cierre CRUZA al alza la EMA50 de 1h
+Salida (1h):               RSI(14) > 70  O  ROI  O  stop por ATR  O  trailing
+
+La entrada es de dos etapas a proposito. La version inicial pedia el cruce de
+RSI y el precio sobre la EMA50 en la MISMA vela, y eso resulto casi imposible:
+5 senales en 45 meses. Ver populate_entry_trend() para la medicion.
 Stop:                      ATR(14) x 2 desde la entrada, acotado entre -1.5% y -5%
 Trailing:                  se activa en +3%, bloquea ~+1%
 
@@ -140,6 +145,12 @@ class TrendPullbackV1(IStrategy):
     atr_mult = DecimalParameter(1.5, 3.0, default=2.0, decimals=1,
                                 space="sell", optimize=True)
 
+    # Ventana del setup: cuantas velas atras se busca la sobreventa.
+    # 12 velas de 1h = medio dia. NO se optimiza a proposito: anadirlo al
+    # hyperopt seria un cuarto parametro, y con ~240 operaciones tres ya es
+    # agresivo. 12 es una eleccion de diseno, no un numero ajustado al pasado.
+    PULLBACK_LOOKBACK = 12
+
     # Limites del stop. NO se optimizan: son restricciones de riesgo,
     # no parametros a ajustar contra el historico.
     STOP_CAP = 0.05        # nunca arriesgar mas de 5% en una operacion
@@ -195,15 +206,39 @@ class TrendPullbackV1(IStrategy):
     #  Entrada
     # ------------------------------------------------------------------ #
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        """
+        Entrada en dos etapas: SETUP y GATILLO.
 
+        La version 1 pedia las dos cosas en la misma vela -- que el RSI cruzara
+        al alza 35 Y que el cierre estuviera sobre la EMA50 de 1h -- y eso es
+        casi imposible: medido sobre 2023-2026, en el 99% de los 815 cruces de
+        RSI por 35 el cierre quedaba BAJO la EMA50 (mediana -1.34% en BTC,
+        -1.74% en ETH). Que el RSI(14) caiga a 35 IMPLICA un retroceso lo bastante
+        grande para perder la media de 50 periodos. Resultado: 5 senales en 45
+        meses y 3 operaciones en el backtest.
+
+        La correccion separa las dos condiciones en el tiempo:
+          SETUP   el RSI toco sobreventa en alguna de las ultimas 12 velas
+          GATILLO el cierre RECUPERA la EMA50 de 1h
+
+        Asi se entra en la vuelta, no en la caida, que era la intencion original.
+        Medido: 237 senales en el mismo periodo (~5.2/mes).
+        """
         conditions = (
             # 1. Estructura mayor alcista (4h, vela ya cerrada)
             (dataframe[f"uptrend_{self.inf_timeframe}"] == 1)
-            # 2. Retroceso agotandose: el RSI CRUZA hacia arriba el umbral.
-            #    Usamos cruce, no "rsi < 35", para no comprar en caida libre.
-            & (qtpylib.crossed_above(dataframe["rsi"], self.buy_rsi.value))
-            # 3. El precio aguanta sobre su EMA50 de 1h -> retroceso, no ruptura
-            & (dataframe["close"] > dataframe["ema50"])
+
+            # 2. SETUP: hubo retroceso reciente. El .shift(1) es importante:
+            #    la ventana mira las velas t-12 .. t-1, nunca la actual, asi que
+            #    no se usa informacion de la vela que todavia se esta evaluando.
+            & (dataframe["rsi"].shift(1)
+               .rolling(self.PULLBACK_LOOKBACK).min() < self.buy_rsi.value)
+
+            # 3. GATILLO: el precio confirma la vuelta recuperando su EMA50.
+            #    Es un cruce, no un nivel: entramos en el momento de la
+            #    recuperacion, no en cualquier vela que ya este por encima.
+            & (qtpylib.crossed_above(dataframe["close"], dataframe["ema50"]))
+
             # 4. Sanidad: vela con volumen real
             & (dataframe["volume"] > 0)
         )
@@ -215,16 +250,25 @@ class TrendPullbackV1(IStrategy):
     #  Salida por senal
     # ------------------------------------------------------------------ #
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
+        """
+        Unica salida por senal: sobrecompra. La proteccion la dan el stop por
+        ATR, el trailing y el ROI.
 
-        # a) Sobrecompra: tomamos ganancia en fuerza
+        La version anterior tambien salia cuando el cierre perdia la EMA50 de
+        1h. Con la entrada en dos etapas eso es contradictorio: se entra CUANDO
+        el cierre cruza al alza la EMA50, asi que salir al perderla es entrar y
+        salir en el mismo cruce. Medido en 2023-02 -> 2025-01: provocaba 91 de
+        las 111 salidas con un 1.1% de acierto, y el stop por ATR nunca llegaba
+        a dispararse porque esta salida se le adelantaba siempre.
+
+        Se quita la regla en vez de ponerle un colchon. Un colchon del 1% daba
+        -3.66% frente al -4.84% de quitarla, pero las dos pierden y elegir la
+        menos mala por una decima en el in-sample es justo la clase de ajuste
+        que este proyecto intenta evitar. Se prefiere la razon -- la regla
+        contradice la entrada -- antes que el decimal.
+        """
         overbought = qtpylib.crossed_above(dataframe["rsi"], self.sell_rsi.value)
-
-        # b) Perdida de estructura: el cierre pierde la EMA50 de 1h.
-        #    Es la salida que de verdad protege: no espera al stop.
-        lost_trend = qtpylib.crossed_below(dataframe["close"], dataframe["ema50"])
-
         dataframe.loc[overbought, ["exit_long", "exit_tag"]] = (1, "rsi_overbought")
-        dataframe.loc[lost_trend, ["exit_long", "exit_tag"]] = (1, "lost_ema50")
         return dataframe
 
     # ------------------------------------------------------------------ #

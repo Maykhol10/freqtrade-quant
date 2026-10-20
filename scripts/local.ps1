@@ -165,7 +165,7 @@ switch ($Task) {
     & $FT backtesting --config $Config --strategy $Strategy `
         --timerange $InSample @detail --breakdown month `
         --enable-protections --cache none `
-        --export trades --export-filename user_data/backtest_results/in_sample.json
+        --export trades
 }
 
 'backtest-oos' {
@@ -175,7 +175,7 @@ switch ($Task) {
     Step "Backtest out-of-sample $OutSample"
     & $FT backtesting --config $Config --strategy $Strategy `
         --timerange $OutSample --breakdown month --enable-protections --cache none `
-        --export trades --export-filename user_data/backtest_results/out_of_sample.json
+        --export trades
 }
 
 'benchmark' {
@@ -184,7 +184,7 @@ switch ($Task) {
     & $FT backtesting --config $Config --strategy BuyAndHoldBTC `
         --pairs BTC/USDT --max-open-trades 1 --stake-amount unlimited `
         --timerange $InSample --cache none `
-        --export trades --export-filename user_data/backtest_results/buyhold_in.json
+        --export trades
 }
 
 'benchmark-oos' {
@@ -193,7 +193,7 @@ switch ($Task) {
     & $FT backtesting --config $Config --strategy BuyAndHoldBTC `
         --pairs BTC/USDT --max-open-trades 1 --stake-amount unlimited `
         --timerange $OutSample --cache none `
-        --export trades --export-filename user_data/backtest_results/buyhold_out.json
+        --export trades
 }
 
 'stress' {
@@ -229,21 +229,17 @@ switch ($Task) {
 }
 
 'dashboard' {
-    if (-not (Test-Path 'user_data/backtest_results/in_sample.json')) {
+    if (-not (Get-ChildItem 'user_data/backtest_results' -Filter '*.zip' -ErrorAction SilentlyContinue)) {
         Write-Host "Falta el backtest. Corre primero:" -ForegroundColor Red
         Write-Host "  .\scripts\local.ps1 backtest"
         exit 1
     }
-    $bench = @()
-    if (Test-Path 'user_data/backtest_results/buyhold_in.json') {
-        $bench = @('--benchmark', 'user_data/backtest_results/buyhold_in.json')
-    } else {
-        Warn 'sin benchmark: corre  .\scripts\local.ps1 benchmark  para la comparativa'
-    }
     Step 'Generando dashboard'
+    # report.py localiza los resultados por nombre de estrategia: Freqtrade
+    # ignora --export-filename y nombra los archivos por fecha.
     $py = if (Test-Path $PY) { $PY } else { 'python' }
-    & $py scripts/report.py --in user_data/backtest_results/in_sample.json `
-        @bench --out docs/report.html --label "In-sample $InSample"
+    & $py scripts/report.py --strategy $Strategy `
+        --out docs/report.html --label "In-sample $InSample"
     $code = $LASTEXITCODE
     Write-Host ""
     Ok "Abrelo con:  start docs\report.html"

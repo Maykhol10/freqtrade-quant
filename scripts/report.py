@@ -26,6 +26,7 @@ import json
 import math
 import os
 import sys
+import zipfile
 from datetime import datetime, timezone
 
 # ---------------------------------------------------------------- #
@@ -72,25 +73,67 @@ def parse_dt(value):
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
-def newest_result():
-    """El JSON de backtest mas reciente, ignorando metadatos y punteros."""
-    candidates = []
-    for path in glob.glob("user_data/backtest_results/*.json"):
-        base = os.path.basename(path)
-        if base.startswith(".") or base.endswith(".meta.json") or "last_result" in base:
-            continue
-        candidates.append(path)
-    if not candidates:
-        return None
-    return max(candidates, key=os.path.getmtime)
+RESULTS_DIR = "user_data/backtest_results"
 
 
-def load_result(path):
-    """Devuelve (nombre_estrategia, dict_resultado) del archivo de backtest."""
+def read_raw(path):
+    """
+    Lee el JSON de un resultado de backtest.
+
+    Freqtrade 2024.x+ empaqueta cada resultado en un .zip que contiene el JSON,
+    el config usado, una copia de la estrategia y las series de wallet y
+    market_change en feather. Las versiones anteriores escribian un .json
+    suelto. Se soportan las dos.
+    """
+    if path.endswith(".zip"):
+        with zipfile.ZipFile(path) as zf:
+            inner = [n for n in zf.namelist()
+                     if n.endswith(".json")
+                     and not n.endswith("_config.json")
+                     and ".meta." not in n]
+            if not inner:
+                raise SystemExit(f"ERROR: {path} no contiene el JSON de resultados.")
+            return json.loads(zf.read(sorted(inner)[0]))
     with open(path, encoding="utf-8") as fh:
-        raw = json.load(fh)
+        return json.load(fh)
 
+
+def strategies_in(path):
+    """Nombres de estrategia que contiene un resultado, sin cargarlo entero."""
+    try:
+        raw = read_raw(path)
+    except Exception:
+        return []
+    return sorted((raw.get("strategy") or {}).keys())
+
+
+def find_result(strategy=None):
+    """
+    El resultado mas reciente que contenga `strategy` (o el mas reciente si no
+    se indica ninguna). Se busca por contenido y no por nombre de archivo porque
+    Freqtrade ignora --export-filename y nombra los resultados por fecha.
+    """
+    candidates = []
+    for pattern in ("*.zip", "*.json"):
+        for path in glob.glob(os.path.join(RESULTS_DIR, pattern)):
+            base = os.path.basename(path)
+            if base.startswith(".") or base.endswith(".meta.json") \
+               or base.endswith("_config.json") or "last_result" in base:
+                continue
+            candidates.append(path)
+
+    candidates.sort(key=os.path.getmtime, reverse=True)
+    for path in candidates:
+        if strategy is None or strategy in strategies_in(path):
+            return path
+    return None
+
+
+def load_result(path, strategy=None):
+    """Devuelve (nombre_estrategia, dict_resultado) del archivo de backtest."""
+    raw = read_raw(path)
     strategies = raw.get("strategy") or {}
+
     if not strategies:
         # Algunas versiones guardan el resultado plano
         if "trades" in raw:
@@ -99,6 +142,14 @@ def load_result(path):
             f"ERROR: {path} no contiene resultados de estrategia.\n"
             "       ¿Exportaste con --export trades?"
         )
+
+    if strategy:
+        if strategy not in strategies:
+            raise SystemExit(
+                f"ERROR: {path} no contiene la estrategia '{strategy}'.\n"
+                f"       Contiene: {', '.join(sorted(strategies))}"
+            )
+        return strategy, strategies[strategy]
 
     name = sorted(strategies)[0]
     return name, strategies[name]
@@ -1110,8 +1161,17 @@ def render(m, bench, checks, meta):
 def main():
     ap = argparse.ArgumentParser(
         description="Dashboard HTML desde los resultados de backtest de Freqtrade.")
-    ap.add_argument("--in", dest="src", help="JSON de backtest (por defecto: el mas reciente)")
-    ap.add_argument("--benchmark", help="JSON del backtest de BuyAndHoldBTC")
+    ap.add_argument("--in", dest="src",
+                    help="Resultado de backtest (.zip o .json). Por defecto se busca "
+                         "el mas reciente que contenga --strategy")
+    ap.add_argument("--strategy", default=None,
+                    help="Estrategia a analizar (si el resultado tiene varias)")
+    ap.add_argument("--benchmark",
+                    help="Resultado del benchmark (.zip o .json)")
+    ap.add_argument("--benchmark-strategy", default="BuyAndHoldBTC",
+                    help="Estrategia del benchmark (por defecto BuyAndHoldBTC)")
+    ap.add_argument("--no-benchmark", action="store_true",
+                    help="No buscar benchmark automaticamente")
     ap.add_argument("--out", default="docs/report.html", help="HTML de salida")
     ap.add_argument("--label", default="", help="Etiqueta del periodo, ej: 'In-sample 2023-2024'")
     ap.add_argument("--oos", action="store_true",
@@ -1120,22 +1180,31 @@ def main():
                     help="Capital inicial si el JSON no lo trae")
     args = ap.parse_args()
 
-    src = args.src or newest_result()
+    src = args.src or find_result(args.strategy)
     if not src:
         raise SystemExit(
-            "ERROR: no hay resultados de backtest en user_data/backtest_results/.\n"
+            f"ERROR: no hay resultados de backtest en {RESULTS_DIR}/.\n"
             "       Corre primero:  make backtest-in")
     if not os.path.exists(src):
         raise SystemExit(f"ERROR: no existe {src}")
 
-    name, result = load_result(src)
+    name, result = load_result(src, args.strategy)
     m = compute(result, args.starting_balance)
 
+    # Benchmark: el explicito, o el resultado mas reciente que lo contenga.
+    # Freqtrade ignora --export-filename y nombra por fecha, asi que se busca
+    # por contenido.
+    bench_src = args.benchmark
+    if not bench_src and not args.no_benchmark:
+        bench_src = find_result(args.benchmark_strategy)
+        if bench_src == src:
+            bench_src = None
+
     bench = None
-    if args.benchmark:
-        if not os.path.exists(args.benchmark):
-            raise SystemExit(f"ERROR: no existe el benchmark {args.benchmark}")
-        _, bres = load_result(args.benchmark)
+    if bench_src:
+        if not os.path.exists(bench_src):
+            raise SystemExit(f"ERROR: no existe el benchmark {bench_src}")
+        _, bres = load_result(bench_src, args.benchmark_strategy)
         bm = compute(bres, args.starting_balance)
         bench = {
             "profit_pct": bm["profit_pct"],
@@ -1145,9 +1214,6 @@ def main():
             # puntos de cierre para que el drawdown signifique algo.
             "dd_medible": bm["n"] >= 5,
         }
-    elif m.get("market_change") is not None:
-        # Fallback debil: el cambio medio del mercado en el periodo, sin drawdown
-        bench = None
 
     checks = evaluate(m, bench, args.oos)
 
@@ -1170,7 +1236,10 @@ def main():
     size = os.path.getsize(args.out) / 1024
 
     print(f"Escrito {args.out}  ({size:.0f} KB)")
+    print(f"  fuente:       {src}")
     print(f"  estrategia:   {name}")
+    if bench_src:
+        print(f"  benchmark:    {bench_src}")
     print(f"  periodo:      {m['first'].date()} -> {m['last'].date()}  ({m['span_days']} dias)")
     print(f"  operaciones:  {m['n']}  ({m['wins']}G / {m['losses']}P)")
     print(f"  EV/operacion: {m['ev']:+.4f} USDT")

@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Analisis de backtest · TrendPullbackV1 · freqtrade-quant</title>
+<meta name="description" content="Metricas, curva de capital y semaforo de umbrales del backtest de TrendPullbackV1.">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{
+  color-scheme:light;
+  --plane:#f9f9f7; --surface:#fcfcfb;
+  --ink:#0b0b0b; --ink2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,0.10);
+  --s1:#2a78d6; --s2:#eb6834;
+  --pos:#2a78d6; --neg:#e34948;
+  --good:#0ca30c; --warning:#fab219; --critical:#d03b3b;
+  --good-ink:#006300;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --plane:#0d0d0d; --surface:#1a1a19;
+    --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#d95926;
+    --pos:#3987e5; --neg:#e66767;
+    --good-ink:#0ca30c;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --plane:#0d0d0d; --surface:#1a1a19;
+  --ink:#f0efec; --ink2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+  --s1:#3987e5; --s2:#d95926;
+  --pos:#3987e5; --neg:#e66767;
+  --good-ink:#0ca30c;
+}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0;padding:0;background:var(--plane);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:15px;line-height:1.55;
+}
+.wrap{max-width:1040px;margin:0 auto;padding:32px 16px 72px}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;
+  justify-content:space-between;margin-bottom:8px}
+h1{font-size:1.45rem;margin:0 0 2px;letter-spacing:-0.01em}
+h2{font-size:1.05rem;margin:0 0 4px;letter-spacing:-0.005em}
+.sub{color:var(--ink2);font-size:0.875rem;margin:0}
+.muted{color:var(--muted)}
+#theme{
+  background:var(--surface);color:var(--ink2);border:1px solid var(--border);
+  border-radius:8px;padding:7px 12px;font:inherit;font-size:0.8rem;cursor:pointer;
+}
+#theme:hover{color:var(--ink)}
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  padding:20px;margin:16px 0;
+}
+.grid3{display:grid;gap:16px;grid-template-columns:1fr;margin:16px 0}
+@media (min-width:720px){.grid3{grid-template-columns:2fr 1fr}}
+
+/* ---- Hero: exactamente una por vista ---- */
+.hero .label{color:var(--ink2);font-size:0.8rem;text-transform:none;margin:0}
+.hero .value{font-size:clamp(2.6rem,7vw,3.4rem);font-weight:650;line-height:1.05;
+  letter-spacing:-0.02em;margin:4px 0 2px}
+.hero .unit{font-size:0.95rem;font-weight:400;color:var(--ink2);margin-left:6px}
+.hero .why{color:var(--ink2);font-size:0.825rem;margin:8px 0 0;max-width:46ch}
+.up{color:var(--good-ink)}.down{color:var(--critical)}
+
+/* ---- Stat tiles ---- */
+.tiles{display:grid;gap:1px;background:var(--border);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;grid-template-columns:repeat(2,1fr)}
+@media (min-width:620px){.tiles{grid-template-columns:repeat(4,1fr)}}
+.tile{background:var(--surface);padding:14px 16px}
+.tile .k{color:var(--ink2);font-size:0.75rem;display:block;margin-bottom:2px}
+.tile .v{font-size:1.3rem;font-weight:600;letter-spacing:-0.01em}
+.tile .n{color:var(--muted);font-size:0.72rem;display:block;margin-top:1px}
+
+/* ---- Charts ---- */
+.chart{width:100%;height:auto;display:block;overflow:visible;margin-top:10px}
+.grid{stroke:var(--grid);stroke-width:1}
+.axis{stroke:var(--axis);stroke-width:1}
+.tick{fill:var(--muted);font-size:10.5px;font-variant-numeric:tabular-nums;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.line{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.line.s1{stroke:var(--s1)}
+.area.s1{fill:var(--s1);opacity:0.10;stroke:none}
+.dot.s1{fill:var(--s1);stroke:var(--surface);stroke-width:2}
+.ref{stroke:var(--s2);stroke-width:2;opacity:0.9}
+.reflabel,.endlabel{fill:var(--ink2);font-size:11px;font-weight:600;
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+.bar.pos{fill:var(--pos)}
+.bar.neg{fill:var(--neg)}
+.barhit{cursor:crosshair}
+.hoverlayer{opacity:0;pointer-events:none}
+.hoverlayer.on{opacity:1}
+.crosshair{stroke:var(--axis);stroke-width:1}
+.hoverdot{fill:var(--s1);stroke:var(--surface);stroke-width:2}
+.hoverzone{cursor:crosshair}
+
+/* ---- Legend ---- */
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:12px;
+  font-size:0.8rem;color:var(--ink2)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.key{width:14px;height:3px;border-radius:2px;flex:none}
+.key.sq{width:11px;height:11px;border-radius:3px}
+
+/* ---- Semaforo ---- */
+table{width:100%;border-collapse:collapse;font-size:0.86rem}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border)}
+th{color:var(--ink2);font-weight:600;font-size:0.78rem}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tbody tr:last-child td{border-bottom:none}
+.badge{display:inline-flex;align-items:center;gap:6px;font-weight:600;
+  font-size:0.78rem;white-space:nowrap}
+.badge .ico{font-size:0.9rem;line-height:1}
+.badge.good{color:var(--good-ink)}
+.badge.warning{color:#8a5d00}
+.badge.critical{color:var(--critical)}
+/* El ambar de "warning" no llega a 3:1 sobre la superficie clara, asi que en
+   light se usa un paso mas oscuro. El icono + la palabra son la mitigacion:
+   el color nunca carga el significado solo. */
+:root[data-theme="dark"] .badge.warning{color:var(--warning)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .badge.warning{color:var(--warning)}
+}
+details{margin-top:14px;border-top:1px solid var(--border);padding-top:10px}
+summary{cursor:pointer;color:var(--ink2);font-size:0.8rem}
+summary:hover{color:var(--ink)}
+.banner{border-radius:10px;padding:14px 16px;margin:16px 0;font-size:0.9rem;
+  border:1px solid var(--border);background:var(--surface)}
+.banner strong{display:block;margin-bottom:3px}
+.banner.good{border-left:3px solid var(--good)}
+.banner.warning{border-left:3px solid var(--warning)}
+.banner.critical{border-left:3px solid var(--critical)}
+#tip{
+  position:fixed;pointer-events:none;opacity:0;z-index:20;
+  background:var(--surface);color:var(--ink);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;font-size:0.78rem;line-height:1.45;
+  box-shadow:0 4px 14px rgba(0,0,0,0.13);max-width:240px;
+  font-variant-numeric:tabular-nums;
+}
+#tip.on{opacity:1}
+#tip b{font-weight:650}
+footer{color:var(--muted);font-size:0.78rem;margin-top:40px;
+  border-top:1px solid var(--border);padding-top:16px}
+footer a{color:var(--ink2)}
+@media print{
+  body{background:#fff}
+  .card{break-inside:avoid}
+  #theme,#tip{display:none}
+  details{display:block}
+  details>summary{display:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div>
+    <h1>Analisis de backtest</h1>
+    <p class="sub">TrendPullbackV1 · In-sample 2023-02-07 -&gt; 2025-01-01 · timeframe 1h
+      · generado 2026-10-20 11:52</p>
+  </div>
+  <button id="theme" type="button">Tema oscuro</button>
+</header>
+
+<div class="banner critical">
+  <strong>No hay ventaja demostrada (6 criterios fallan)</strong>
+  Al menos un criterio bloqueante no se cumple. Volver al diseno, no reoptimizar sobre este mismo periodo: eso solo mide cuanto sobreajustas.
+</div>
+
+<div class="grid3">
+  <div class="card hero">
+    <p class="label">Valor esperado por operacion, despues de comisiones</p>
+    <div class="value down">-0.0192<span class="unit">USDT</span></div>
+    <p class="why">Es la unica metrica que decide si existe una ventaja. Con operaciones
+      de 10 USDT, la comision de ida y vuelta cuesta ~0.02 USDT:
+      el valor esperado tiene que ser comodamente superior a eso.
+      Media de 101 operaciones.</p>
+  </div>
+  <div class="card">
+    <h2>Periodo</h2>
+    <p class="sub">
+      2023-02-14 &rarr; 2024-12-15<br>
+      669 dias · 86 con operaciones<br>
+      0.15 operaciones/dia<br>
+      duracion media 14.3 h<br>
+      capital inicial 40.00 USDT
+    </p>
+  </div>
+</div>
+
+<div class="tiles">
+  <div class="tile"><span class="k">Operaciones</span><span class="v ">101</span><span class="n">51 ganadas / 50 perdidas</span></div>
+  <div class="tile"><span class="k">Win rate</span><span class="v ">50.5%</span><span class="n">no mirar sin la perdida media</span></div>
+  <div class="tile"><span class="k">Profit total</span><span class="v ">-4.8%</span><span class="n">-1.94 USDT</span></div>
+  <div class="tile"><span class="k">Max drawdown</span><span class="v ">8.3%</span><span class="n">3.43 USDT</span></div>
+  <div class="tile"><span class="k">Profit factor</span><span class="v ">0.79</span><span class="n">ganancias / perdidas brutas</span></div>
+  <div class="tile"><span class="k">Sharpe</span><span class="v ">-2.06</span><span class="n">anualizado, retornos diarios</span></div>
+  <div class="tile"><span class="k">Sortino</span><span class="v ">-4.27</span><span class="n">solo penaliza caidas</span></div>
+  <div class="tile"><span class="k">CAGR</span><span class="v ">-2.7%</span><span class="n">extrapolado del periodo</span></div>
+</div>
+
+<div class="tiles">
+  <div class="tile"><span class="k">Ganancia media</span><span class="v ">+0.147</span><span class="n">USDT por operacion ganadora</span></div>
+  <div class="tile"><span class="k">Perdida media</span><span class="v ">-0.188</span><span class="n">USDT por operacion perdedora</span></div>
+  <div class="tile"><span class="k">Mejor operacion</span><span class="v ">+0.38</span><span class="n">BTC/USDT</span></div>
+  <div class="tile"><span class="k">Peor operacion</span><span class="v ">-0.37</span><span class="n">BTC/USDT</span></div>
+</div>
+
+<div class="card">
+  <h2>Semaforo contra los umbrales</h2>
+  <p class="sub">Umbrales de <code>docs/VALIDACION.md</code>. Un solo FALLA es motivo
+    suficiente para no avanzar.</p>
+  <table><thead><tr><th class="">Criterio</th><th class="num">Valor</th><th class="">Umbral</th><th class="">Estado</th></tr></thead><tbody><tr><td class="">Numero de operaciones</td><td class="num">101</td><td class="">&gt;= 100</td><td class=""><span class="badge good"><span class="ico">&#10003;</span>PASA</span></td></tr><tr><td class="">Valor esperado por operacion<br><span class="muted">sin ventaja: cada operacion pierde dinero en promedio</span></td><td class="num">-0.0192 USDT</td><td class="">&gt; 0</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Profit factor<br><span class="muted">entre 1.0 y 1.3 la ventaja no sobrevive al slippage</span></td><td class="num">0.79</td><td class="">&gt; 1.3</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Max drawdown</td><td class="num">8.3%</td><td class="">&lt; 20%</td><td class=""><span class="badge good"><span class="ico">&#10003;</span>PASA</span></td></tr><tr><td class="">Sharpe</td><td class="num">-2.06</td><td class="">&gt; 0.5</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Sortino</td><td class="num">-4.27</td><td class="">&gt; 0.8</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Aguanta sin el mejor mes<br><span class="muted">el mejor mes fue 2023-11</span></td><td class="num">-2.38 USDT</td><td class="">&gt; 0</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Aguanta sin la mejor operacion</td><td class="num">-2.32 USDT</td><td class="">&gt; 0</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Supera a comprar y mantener<br><span class="muted">pierde en profit; el drawdown del benchmark no es medible desde una sola operacion, asi que la comparacion por profit/drawdown queda pendiente</span></td><td class="num">-4.8% vs +304.4%</td><td class="">profit o ratio profit/DD</td><td class=""><span class="badge warning"><span class="ico">&#33;</span>REVISAR</span></td></tr></tbody></table>
+</div>
+
+<div class="card">
+  <h2>Curva de rentabilidad acumulada</h2>
+  <p class="sub">Rentabilidad sobre el capital inicial, operacion a operacion.
+    El buy &amp; hold se dibuja como linea de referencia en su valor final: desde las
+    operaciones exportadas no se puede reconstruir su curva intermedia.</p>
+  <svg class="chart" viewBox="0 0 760 240" role="img" aria-label="Serie temporal" data-chart="eq">
+<line class="grid" x1="54" y1="210.0" x2="744" y2="210.0"/>
+<text class="tick" x="46" y="213.5" text-anchor="end">-100%</text>
+<line class="grid" x1="54" y1="170.4" x2="744" y2="170.4"/>
+<text class="tick" x="46" y="173.9" text-anchor="end">+0%</text>
+<line class="grid" x1="54" y1="130.8" x2="744" y2="130.8"/>
+<text class="tick" x="46" y="134.3" text-anchor="end">+100%</text>
+<line class="grid" x1="54" y1="91.2" x2="744" y2="91.2"/>
+<text class="tick" x="46" y="94.7" text-anchor="end">+200%</text>
+<line class="grid" x1="54" y1="51.6" x2="744" y2="51.6"/>
+<text class="tick" x="46" y="55.1" text-anchor="end">+300%</text>
+<line class="grid" x1="54" y1="12.0" x2="744" y2="12.0"/>
+<text class="tick" x="46" y="15.5" text-anchor="end">+400%</text>
+<line class="axis" x1="54" y1="170.4" x2="744" y2="170.4"/>
+<text class="tick" x="54.0" y="230" text-anchor="middle">2023-02</text>
+<text class="tick" x="214.5" y="230" text-anchor="middle">2023-07</text>
+<text class="tick" x="392.1" y="230" text-anchor="middle">2024-01</text>
+<text class="tick" x="538.0" y="230" text-anchor="middle">2024-05</text>
+<text class="tick" x="744.0" y="230" text-anchor="middle">2024-12</text>
+<polygon class="area s1" points="54.0,170.4 54.0,170.2 57.2,170.0 60.7,169.8 60.9,169.8 63.1,170.0 63.1,170.1 66.7,170.0 69.9,169.8 98.0,169.6 100.1,169.8 103.6,169.9 103.7,170.1 106.4,170.3 107.3,170.4 110.8,170.3 113.5,170.1 118.8,170.0 128.4,169.8 190.1,170.0 193.7,169.8 199.1,169.9 204.6,169.9 204.7,169.7 207.6,169.6 211.8,169.8 214.5,169.7 316.9,169.9 325.0,169.8 328.4,169.7 329.6,169.7 336.5,169.5 336.8,169.3 340.6,169.2 342.8,169.4 343.7,169.1 348.2,169.3 348.4,169.5 360.0,169.4 362.6,169.6 365.8,169.4 368.7,169.5 369.7,169.7 369.7,169.9 370.8,169.5 371.4,169.7 372.6,169.8 378.2,170.0 378.2,170.2 383.8,170.1 389.5,170.3 392.1,170.0 394.3,170.3 400.2,170.3 405.8,170.5 420.1,170.6 421.0,170.8 428.1,170.7 429.8,170.5 434.5,170.5 434.5,170.3 438.3,170.5 442.5,170.3 451.3,170.3 452.5,170.2 456.8,170.1 458.9,170.3 461.2,170.7 464.0,171.0 464.5,171.2 475.4,171.4 477.4,171.4 489.0,171.4 489.8,171.6 529.1,171.4 534.2,171.3 538.0,171.5 539.4,171.4 539.5,171.6 551.1,171.7 551.1,171.9 590.8,171.7 595.0,171.9 597.5,171.6 662.6,171.5 665.4,171.7 680.0,171.4 691.2,171.4 699.0,171.5 702.1,171.7 703.1,171.6 711.5,171.9 716.4,172.1 723.5,171.9 723.7,172.1 731.0,172.3 731.0,172.5 732.8,172.3 733.2,172.2 737.6,172.4 740.3,172.2 744.0,172.3 744.0,170.4"/>
+<polyline class="line s1" points="54.0,170.2 57.2,170.0 60.7,169.8 60.9,169.8 63.1,170.0 63.1,170.1 66.7,170.0 69.9,169.8 98.0,169.6 100.1,169.8 103.6,169.9 103.7,170.1 106.4,170.3 107.3,170.4 110.8,170.3 113.5,170.1 118.8,170.0 128.4,169.8 190.1,170.0 193.7,169.8 199.1,169.9 204.6,169.9 204.7,169.7 207.6,169.6 211.8,169.8 214.5,169.7 316.9,169.9 325.0,169.8 328.4,169.7 329.6,169.7 336.5,169.5 336.8,169.3 340.6,169.2 342.8,169.4 343.7,169.1 348.2,169.3 348.4,169.5 360.0,169.4 362.6,169.6 365.8,169.4 368.7,169.5 369.7,169.7 369.7,169.9 370.8,169.5 371.4,169.7 372.6,169.8 378.2,170.0 378.2,170.2 383.8,170.1 389.5,170.3 392.1,170.0 394.3,170.3 400.2,170.3 405.8,170.5 420.1,170.6 421.0,170.8 428.1,170.7 429.8,170.5 434.5,170.5 434.5,170.3 438.3,170.5 442.5,170.3 451.3,170.3 452.5,170.2 456.8,170.1 458.9,170.3 461.2,170.7 464.0,171.0 464.5,171.2 475.4,171.4 477.4,171.4 489.0,171.4 489.8,171.6 529.1,171.4 534.2,171.3 538.0,171.5 539.4,171.4 539.5,171.6 551.1,171.7 551.1,171.9 590.8,171.7 595.0,171.9 597.5,171.6 662.6,171.5 665.4,171.7 680.0,171.4 691.2,171.4 699.0,171.5 702.1,171.7 703.1,171.6 711.5,171.9 716.4,172.1 723.5,171.9 723.7,172.1 731.0,172.3 731.0,172.5 732.8,172.3 733.2,172.2 737.6,172.4 740.3,172.2 744.0,172.3"/>
+<line class="ref" x1="54" y1="49.9" x2="744" y2="49.9"/>
+<text class="reflabel" x="740" y="43.9" text-anchor="end">Buy &amp; hold +304.4%</text>
+<circle class="dot s1" cx="744.0" cy="172.3" r="4.5"/>
+<text class="endlabel" x="736.0" y="162.3" text-anchor="end">-4.8%</text>
+<g class="hoverlayer"><line class="crosshair" x1="0" y1="12" x2="0" y2="210"/><circle class="hoverdot" r="5"/></g>
+<rect class="hoverzone" x="54" y="12" width="690" height="198" fill="transparent"/>
+</svg>
+  <div class="legend">
+    <span><i class="key" style="background:var(--s1)"></i>TrendPullbackV1</span>
+    <span><i class="key" style="background:var(--s2)"></i>Buy &amp; hold BTC (final)</span>
+  </div>
+  <details><summary>Ver los datos en tabla</summary>
+    <table><thead><tr><th class="">Cierre</th><th class="num">Rentabilidad</th><th class="num">Capital USDT</th></tr></thead><tbody><tr><td class="">2023-02-14 14:00</td><td class="num">+0.49%</td><td class="num">40.20</td></tr><tr><td class="">2023-02-17 17:00</td><td class="num">+0.98%</td><td class="num">40.39</td></tr><tr><td class="">2023-02-21 02:00</td><td class="num">+1.47%</td><td class="num">40.59</td></tr><tr><td class="">2023-02-21 06:00</td><td class="num">+1.59%</td><td class="num">40.64</td></tr><tr><td class="">2023-02-23 11:00</td><td class="num">+1.14%</td><td class="num">40.45</td></tr><tr><td class="">2023-02-23 11:00</td><td class="num">+0.65%</td><td class="num">40.26</td></tr><tr><td class="">2023-02-26 21:00</td><td class="num">+0.98%</td><td class="num">40.39</td></tr><tr><td class="">2023-03-02 00:00</td><td class="num">+1.48%</td><td class="num">40.59</td></tr><tr><td class="">2023-03-29 07:00</td><td class="num">+2.06%</td><td class="num">40.83</td></tr><tr><td class="">2023-03-31 07:00</td><td class="num">+1.57%</td><td class="num">40.63</td></tr><tr><td class="">2023-04-03 17:00</td><td class="num">+1.15%</td><td class="num">40.46</td></tr><tr><td class="">2023-04-03 20:00</td><td class="num">+0.73%</td><td class="num">40.29</td></tr><tr><td class="">2023-04-06 10:00</td><td class="num">+0.31%</td><td class="num">40.12</td></tr><tr><td class="">2023-04-07 07:00</td><td class="num">-0.11%</td><td class="num">39.95</td></tr><tr><td class="">2023-04-10 17:00</td><td class="num">+0.20%</td><td class="num">40.08</td></tr><tr><td class="">2023-04-13 08:00</td><td class="num">+0.70%</td><td class="num">40.28</td></tr><tr><td class="">2023-04-18 12:00</td><td class="num">+1.05%</td><td class="num">40.42</td></tr><tr><td class="">2023-04-27 20:00</td><td class="num">+1.55%</td><td class="num">40.62</td></tr><tr><td class="">2023-06-26 16:00</td><td class="num">+1.13%</td><td class="num">40.45</td></tr><tr><td class="">2023-06-30 04:00</td><td class="num">+1.63%</td><td class="num">40.65</td></tr><tr><td class="">2023-07-05 10:00</td><td class="num">+1.21%</td><td class="num">40.48</td></tr><tr><td class="">2023-07-10 18:00</td><td class="num">+1.33%</td><td class="num">40.53</td></tr><tr><td class="">2023-07-10 20:00</td><td class="num">+1.77%</td><td class="num">40.71</td></tr><tr><td class="">2023-07-13 15:00</td><td class="num">+2.01%</td><td class="num">40.80</td></tr><tr><td class="">2023-07-17 17:00</td><td class="num">+1.60%</td><td class="num">40.64</td></tr><tr><td class="">2023-07-20 08:00</td><td class="num">+1.72%</td><td class="num">40.69</td></tr><tr><td class="">2023-10-27 17:00</td><td class="num">+1.29%</td><td class="num">40.52</td></tr><tr><td class="">2023-11-04 14:00</td><td class="num">+1.63%</td><td class="num">40.65</td></tr><tr><td class="">2023-11-07 21:00</td><td class="num">+1.75%</td><td class="num">40.70</td></tr><tr><td class="">2023-11-09 02:00</td><td class="num">+1.87%</td><td class="num">40.75</td></tr><tr><td class="">2023-11-15 18:00</td><td class="num">+2.16%</td><td class="num">40.87</td></tr><tr><td class="">2023-11-16 01:00</td><td class="num">+2.79%</td><td class="num">41.12</td></tr><tr><td class="">2023-11-19 17:00</td><td class="num">+2.91%</td><td class="num">41.16</td></tr><tr><td class="">2023-11-21 22:00</td><td class="num">+2.43%</td><td class="num">40.97</td></tr><tr><td class="">2023-11-22 19:00</td><td class="num">+3.24%</td><td class="num">41.29</td></tr><tr><td class="">2023-11-27 03:00</td><td class="num">+2.81%</td><td class="num">41.13</td></tr><tr><td class="">2023-11-27 07:00</td><td class="num">+2.40%</td><td class="num">40.96</td></tr><tr><td class="">2023-12-08 13:00</td><td class="num">+2.54%</td><td class="num">41.02</td></tr><tr><td class="">2023-12-11 02:00</td><td class="num">+2.12%</td><td class="num">40.85</td></tr><tr><td class="">2023-12-14 06:00</td><td class="num">+2.62%</td><td class="num">41.05</td></tr><tr><td class="">2023-12-17 01:00</td><td class="num">+2.20%</td><td class="num">40.88</td></tr><tr><td class="">2023-12-17 23:00</td><td class="num">+1.78%</td><td class="num">40.71</td></tr><tr><td class="">2023-12-17 23:00</td><td class="num">+1.37%</td><td class="num">40.55</td></tr><tr><td class="">2023-12-19 02:00</td><td class="num">+2.32%</td><td class="num">40.93</td></tr><tr><td class="">2023-12-19 15:00</td><td class="num">+1.86%</td><td class="num">40.75</td></tr><tr><td class="">2023-12-20 20:00</td><td class="num">+1.40%</td><td class="num">40.56</td></tr><tr><td class="">2023-12-26 05:00</td><td class="num">+0.99%</td><td class="num">40.39</td></tr><tr><td class="">2023-12-26 05:00</td><td class="num">+0.58%</td><td class="num">40.23</td></tr><tr><td class="">2023-12-31 16:00</td><td class="num">+0.70%</td><td class="num">40.28</td></tr><tr><td class="">2024-01-06 05:00</td><td class="num">+0.22%</td><td class="num">40.09</td></tr><tr><td class="">2024-01-08 18:00</td><td class="num">+0.90%</td><td class="num">40.36</td></tr><tr><td class="">2024-01-10 20:00</td><td class="num">+0.18%</td><td class="num">40.07</td></tr><tr><td class="">2024-01-16 15:00</td><td class="num">+0.31%</td><td class="num">40.12</td></tr><tr><td class="">2024-01-22 01:00</td><td class="num">-0.19%</td><td class="num">39.92</td></tr><tr><td class="">2024-02-04 22:00</td><td class="num">-0.61%</td><td class="num">39.75</td></tr><tr><td class="">2024-02-05 20:00</td><td class="num">-1.03%</td><td class="num">39.59</td></tr><tr><td class="">2024-02-12 16:00</td><td class="num">-0.79%</td><td class="num">39.68</td></tr><tr><td class="">2024-02-14 08:00</td><td class="num">-0.30%</td><td class="num">39.88</td></tr><tr><td class="">2024-02-18 22:00</td><td class="num">-0.18%</td><td class="num">39.93</td></tr><tr><td class="">2024-02-18 22:00</td><td class="num">+0.31%</td><td class="num">40.12</td></tr><tr><td class="">2024-02-22 13:00</td><td class="num">-0.13%</td><td class="num">39.95</td></tr><tr><td class="">2024-02-26 16:00</td><td class="num">+0.37%</td><td class="num">40.15</td></tr><tr><td class="">2024-03-06 05:00</td><td class="num">+0.31%</td><td class="num">40.12</td></tr><tr><td class="">2024-03-07 08:00</td><td class="num">+0.43%</td><td class="num">40.17</td></tr><tr><td class="">2024-03-11 13:00</td><td class="num">+0.70%</td><td class="num">40.28</td></tr><tr><td class="">2024-03-13 13:00</td><td class="num">+0.14%</td><td class="num">40.06</td></tr><tr><td class="">2024-03-15 20:00</td><td class="num">-0.78%</td><td class="num">39.69</td></tr><tr><td class="">2024-03-18 13:00</td><td class="num">-1.51%</td><td class="num">39.40</td></tr><tr><td class="">2024-03-19 01:00</td><td class="num">-2.14%</td><td class="num">39.14</td></tr><tr><td class="">2024-03-29 15:00</td><td class="num">-2.65%</td><td class="num">38.94</td></tr><tr><td class="">2024-03-31 12:00</td><td class="num">-2.53%</td><td class="num">38.99</td></tr><tr><td class="">2024-04-11 20:00</td><td class="num">-2.40%</td><td class="num">39.04</td></tr><tr><td class="">2024-04-12 13:00</td><td class="num">-2.97%</td><td class="num">38.81</td></tr><tr><td class="">2024-05-20 16:00</td><td class="num">-2.50%</td><td class="num">39.00</td></tr><tr><td class="">2024-05-25 16:00</td><td class="num">-2.34%</td><td class="num">39.06</td></tr><tr><td class="">2024-05-29 08:00</td><td class="num">-2.83%</td><td class="num">38.87</td></tr><tr><td class="">2024-05-30 18:00</td><td class="num">-2.46%</td><td class="num">39.02</td></tr><tr><td class="">2024-05-30 20:00</td><td class="num">-2.91%</td><td class="num">38.84</td></tr><tr><td class="">2024-06-11 01:00</td><td class="num">-3.32%</td><td class="num">38.67</td></tr><tr><td class="">2024-06-11 01:00</td><td class="num">-3.75%</td><td class="num">38.50</td></tr><tr><td class="">2024-07-19 15:00</td><td class="num">-3.26%</td><td class="num">38.69</td></tr><tr><td class="">2024-07-23 16:00</td><td class="num">-3.70%</td><td class="num">38.52</td></tr><tr><td class="">2024-07-26 03:00</td><td class="num">-3.10%</td><td class="num">38.76</td></tr><tr><td class="">2024-09-27 06:00</td><td class="num">-2.77%</td><td class="num">38.89</td></tr><tr><td class="">2024-09-30 00:00</td><td class="num">-3.19%</td><td class="num">38.72</td></tr><tr><td class="">2024-10-14 04:00</td><td class="num">-2.61%</td><td class="num">38.96</td></tr><tr><td class="">2024-10-25 01:00</td><td class="num">-2.46%</td><td class="num">39.02</td></tr><tr><td class="">2024-11-01 15:00</td><td class="num">-2.88%</td><td class="num">38.85</td></tr><tr><td class="">2024-11-04 16:00</td><td class="num">-3.30%</td><td class="num">38.68</td></tr><tr><td class="">2024-11-05 15:00</td><td class="num">-2.92%</td><td class="num">38.83</td></tr><tr><td class="">2024-11-13 19:00</td><td class="num">-3.80%</td><td class="num">38.48</td></tr><tr><td class="">2024-11-18 13:00</td><td class="num">-4.23%</td><td class="num">38.31</td></tr><tr><td class="">2024-11-25 09:00</td><td class="num">-3.87%</td><td class="num">38.45</td></tr><tr><td class="">2024-11-25 14:00</td><td class="num">-4.29%</td><td class="num">38.28</td></tr><tr><td class="">2024-12-02 17:00</td><td class="num">-4.73%</td><td class="num">38.11</td></tr><tr><td class="">2024-12-02 17:00</td><td class="num">-5.33%</td><td class="num">37.87</td></tr><tr><td class="">2024-12-04 11:00</td><td class="num">-4.78%</td><td class="num">38.09</td></tr><tr><td class="">2024-12-04 19:00</td><td class="num">-4.66%</td><td class="num">38.14</td></tr><tr><td class="">2024-12-09 03:00</td><td class="num">-5.08%</td><td class="num">37.97</td></tr><tr><td class="">2024-12-11 16:00</td><td class="num">-4.43%</td><td class="num">38.23</td></tr><tr><td class="">2024-12-15 07:00</td><td class="num">-4.84%</td><td class="num">38.06</td></tr></tbody></table>
+  </details>
+</div>
+
+<div class="card">
+  <h2>Drawdown bajo el agua</h2>
+  <p class="sub">Distancia al maximo historico de capital. Es lo que de verdad
+    determina si podrias operar el sistema sin apagarlo en el peor momento.</p>
+  <svg class="chart" viewBox="0 0 760 240" role="img" aria-label="Serie temporal" data-chart="dd">
+<line class="grid" x1="54" y1="210.0" x2="744" y2="210.0"/>
+<text class="tick" x="46" y="213.5" text-anchor="end">-10%</text>
+<line class="grid" x1="54" y1="177.0" x2="744" y2="177.0"/>
+<text class="tick" x="46" y="180.5" text-anchor="end">-8%</text>
+<line class="grid" x1="54" y1="144.0" x2="744" y2="144.0"/>
+<text class="tick" x="46" y="147.5" text-anchor="end">-6%</text>
+<line class="grid" x1="54" y1="111.0" x2="744" y2="111.0"/>
+<text class="tick" x="46" y="114.5" text-anchor="end">-4%</text>
+<line class="grid" x1="54" y1="78.0" x2="744" y2="78.0"/>
+<text class="tick" x="46" y="81.5" text-anchor="end">-2%</text>
+<line class="grid" x1="54" y1="45.0" x2="744" y2="45.0"/>
+<text class="tick" x="46" y="48.5" text-anchor="end">+0%</text>
+<line class="grid" x1="54" y1="12.0" x2="744" y2="12.0"/>
+<text class="tick" x="46" y="15.5" text-anchor="end">+2%</text>
+<line class="axis" x1="54" y1="45.0" x2="744" y2="45.0"/>
+<text class="tick" x="54.0" y="230" text-anchor="middle">2023-02</text>
+<text class="tick" x="214.5" y="230" text-anchor="middle">2023-07</text>
+<text class="tick" x="392.1" y="230" text-anchor="middle">2024-01</text>
+<text class="tick" x="538.0" y="230" text-anchor="middle">2024-05</text>
+<text class="tick" x="744.0" y="230" text-anchor="middle">2024-12</text>
+<polygon class="area s1" points="54.0,45.0 54.0,45.0 57.2,45.0 60.7,45.0 60.9,45.0 63.1,52.5 63.1,60.4 66.7,55.1 69.9,46.9 98.0,45.0 100.1,52.9 103.6,59.7 103.7,66.6 106.4,73.3 107.3,80.2 110.8,75.2 113.5,67.1 118.8,61.4 128.4,53.3 190.1,60.0 193.7,52.1 199.1,58.9 204.6,56.9 204.7,49.7 207.6,45.8 211.8,52.5 214.5,50.5 316.9,57.4 325.0,52.1 328.4,50.1 329.6,48.2 336.5,45.0 336.8,45.0 340.6,45.0 342.8,52.7 343.7,45.0 348.2,51.8 348.4,58.4 360.0,56.1 362.6,62.8 365.8,54.8 368.7,61.6 369.7,68.2 369.7,74.8 370.8,59.6 371.4,67.0 372.6,74.3 378.2,81.0 378.2,87.5 383.8,85.5 389.5,93.1 392.1,82.3 394.3,93.8 400.2,91.8 405.8,99.8 420.1,106.5 421.0,113.3 428.1,109.4 429.8,101.6 434.5,99.6 434.5,91.9 438.3,98.8 442.5,90.8 451.3,91.8 452.5,89.8 456.8,85.5 458.9,94.5 461.2,109.3 464.0,120.8 464.5,131.0 475.4,139.1 477.4,137.1 489.0,135.1 489.8,144.2 529.1,136.7 534.2,134.1 538.0,142.0 539.4,136.1 539.5,143.2 551.1,149.8 551.1,156.6 590.8,148.9 595.0,155.8 597.5,146.3 662.6,141.0 665.4,147.7 680.0,138.4 691.2,136.1 699.0,142.8 702.1,149.4 703.1,143.3 711.5,157.5 716.4,164.3 723.5,158.7 723.7,165.3 731.0,172.3 731.0,182.0 732.8,173.1 733.2,171.2 737.6,177.9 740.3,167.5 744.0,174.1 744.0,45.0"/>
+<polyline class="line s1" points="54.0,45.0 57.2,45.0 60.7,45.0 60.9,45.0 63.1,52.5 63.1,60.4 66.7,55.1 69.9,46.9 98.0,45.0 100.1,52.9 103.6,59.7 103.7,66.6 106.4,73.3 107.3,80.2 110.8,75.2 113.5,67.1 118.8,61.4 128.4,53.3 190.1,60.0 193.7,52.1 199.1,58.9 204.6,56.9 204.7,49.7 207.6,45.8 211.8,52.5 214.5,50.5 316.9,57.4 325.0,52.1 328.4,50.1 329.6,48.2 336.5,45.0 336.8,45.0 340.6,45.0 342.8,52.7 343.7,45.0 348.2,51.8 348.4,58.4 360.0,56.1 362.6,62.8 365.8,54.8 368.7,61.6 369.7,68.2 369.7,74.8 370.8,59.6 371.4,67.0 372.6,74.3 378.2,81.0 378.2,87.5 383.8,85.5 389.5,93.1 392.1,82.3 394.3,93.8 400.2,91.8 405.8,99.8 420.1,106.5 421.0,113.3 428.1,109.4 429.8,101.6 434.5,99.6 434.5,91.9 438.3,98.8 442.5,90.8 451.3,91.8 452.5,89.8 456.8,85.5 458.9,94.5 461.2,109.3 464.0,120.8 464.5,131.0 475.4,139.1 477.4,137.1 489.0,135.1 489.8,144.2 529.1,136.7 534.2,134.1 538.0,142.0 539.4,136.1 539.5,143.2 551.1,149.8 551.1,156.6 590.8,148.9 595.0,155.8 597.5,146.3 662.6,141.0 665.4,147.7 680.0,138.4 691.2,136.1 699.0,142.8 702.1,149.4 703.1,143.3 711.5,157.5 716.4,164.3 723.5,158.7 723.7,165.3 731.0,172.3 731.0,182.0 732.8,173.1 733.2,171.2 737.6,177.9 740.3,167.5 744.0,174.1"/>
+<circle class="dot s1" cx="744.0" cy="174.1" r="4.5"/>
+<text class="endlabel" x="736.0" y="164.1" text-anchor="end">-7.8%</text>
+<g class="hoverlayer"><line class="crosshair" x1="0" y1="12" x2="0" y2="210"/><circle class="hoverdot" r="5"/></g>
+<rect class="hoverzone" x="54" y="12" width="690" height="198" fill="transparent"/>
+</svg>
+  <details><summary>Ver los datos en tabla</summary>
+    <table><thead><tr><th class="">Cierre</th><th class="num">Drawdown</th></tr></thead><tbody><tr><td class="">2023-02-14 14:00</td><td class="num">0.00%</td></tr><tr><td class="">2023-02-17 17:00</td><td class="num">0.00%</td></tr><tr><td class="">2023-02-21 02:00</td><td class="num">0.00%</td></tr><tr><td class="">2023-02-21 06:00</td><td class="num">0.00%</td></tr><tr><td class="">2023-02-23 11:00</td><td class="num">0.45%</td></tr><tr><td class="">2023-02-23 11:00</td><td class="num">0.93%</td></tr><tr><td class="">2023-02-26 21:00</td><td class="num">0.61%</td></tr><tr><td class="">2023-03-02 00:00</td><td class="num">0.12%</td></tr><tr><td class="">2023-03-29 07:00</td><td class="num">0.00%</td></tr><tr><td class="">2023-03-31 07:00</td><td class="num">0.48%</td></tr><tr><td class="">2023-04-03 17:00</td><td class="num">0.89%</td></tr><tr><td class="">2023-04-03 20:00</td><td class="num">1.31%</td></tr><tr><td class="">2023-04-06 10:00</td><td class="num">1.72%</td></tr><tr><td class="">2023-04-07 07:00</td><td class="num">2.13%</td></tr><tr><td class="">2023-04-10 17:00</td><td class="num">1.83%</td></tr><tr><td class="">2023-04-13 08:00</td><td class="num">1.34%</td></tr><tr><td class="">2023-04-18 12:00</td><td class="num">1.00%</td></tr><tr><td class="">2023-04-27 20:00</td><td class="num">0.51%</td></tr><tr><td class="">2023-06-26 16:00</td><td class="num">0.91%</td></tr><tr><td class="">2023-06-30 04:00</td><td class="num">0.43%</td></tr><tr><td class="">2023-07-05 10:00</td><td class="num">0.84%</td></tr><tr><td class="">2023-07-10 18:00</td><td class="num">0.72%</td></tr><tr><td class="">2023-07-10 20:00</td><td class="num">0.28%</td></tr><tr><td class="">2023-07-13 15:00</td><td class="num">0.05%</td></tr><tr><td class="">2023-07-17 17:00</td><td class="num">0.45%</td></tr><tr><td class="">2023-07-20 08:00</td><td class="num">0.33%</td></tr><tr><td class="">2023-10-27 17:00</td><td class="num">0.75%</td></tr><tr><td class="">2023-11-04 14:00</td><td class="num">0.43%</td></tr><tr><td class="">2023-11-07 21:00</td><td class="num">0.31%</td></tr><tr><td class="">2023-11-09 02:00</td><td class="num">0.19%</td></tr><tr><td class="">2023-11-15 18:00</td><td class="num">0.00%</td></tr><tr><td class="">2023-11-16 01:00</td><td class="num">0.00%</td></tr><tr><td class="">2023-11-19 17:00</td><td class="num">0.00%</td></tr><tr><td class="">2023-11-21 22:00</td><td class="num">0.47%</td></tr><tr><td class="">2023-11-22 19:00</td><td class="num">0.00%</td></tr><tr><td class="">2023-11-27 03:00</td><td class="num">0.41%</td></tr><tr><td class="">2023-11-27 07:00</td><td class="num">0.81%</td></tr><tr><td class="">2023-12-08 13:00</td><td class="num">0.67%</td></tr><tr><td class="">2023-12-11 02:00</td><td class="num">1.08%</td></tr><tr><td class="">2023-12-14 06:00</td><td class="num">0.60%</td></tr><tr><td class="">2023-12-17 01:00</td><td class="num">1.00%</td></tr><tr><td class="">2023-12-17 23:00</td><td class="num">1.41%</td></tr><tr><td class="">2023-12-17 23:00</td><td class="num">1.81%</td></tr><tr><td class="">2023-12-19 02:00</td><td class="num">0.88%</td></tr><tr><td class="">2023-12-19 15:00</td><td class="num">1.33%</td></tr><tr><td class="">2023-12-20 20:00</td><td class="num">1.78%</td></tr><tr><td class="">2023-12-26 05:00</td><td class="num">2.18%</td></tr><tr><td class="">2023-12-26 05:00</td><td class="num">2.58%</td></tr><tr><td class="">2023-12-31 16:00</td><td class="num">2.46%</td></tr><tr><td class="">2024-01-06 05:00</td><td class="num">2.92%</td></tr><tr><td class="">2024-01-08 18:00</td><td class="num">2.26%</td></tr><tr><td class="">2024-01-10 20:00</td><td class="num">2.96%</td></tr><tr><td class="">2024-01-16 15:00</td><td class="num">2.84%</td></tr><tr><td class="">2024-01-22 01:00</td><td class="num">3.32%</td></tr><tr><td class="">2024-02-04 22:00</td><td class="num">3.73%</td></tr><tr><td class="">2024-02-05 20:00</td><td class="num">4.14%</td></tr><tr><td class="">2024-02-12 16:00</td><td class="num">3.90%</td></tr><tr><td class="">2024-02-14 08:00</td><td class="num">3.43%</td></tr><tr><td class="">2024-02-18 22:00</td><td class="num">3.31%</td></tr><tr><td class="">2024-02-18 22:00</td><td class="num">2.84%</td></tr><tr><td class="">2024-02-22 13:00</td><td class="num">3.26%</td></tr><tr><td class="">2024-02-26 16:00</td><td class="num">2.78%</td></tr><tr><td class="">2024-03-06 05:00</td><td class="num">2.84%</td></tr><tr><td class="">2024-03-07 08:00</td><td class="num">2.72%</td></tr><tr><td class="">2024-03-11 13:00</td><td class="num">2.45%</td></tr><tr><td class="">2024-03-13 13:00</td><td class="num">3.00%</td></tr><tr><td class="">2024-03-15 20:00</td><td class="num">3.90%</td></tr><tr><td class="">2024-03-18 13:00</td><td class="num">4.60%</td></tr><tr><td class="">2024-03-19 01:00</td><td class="num">5.21%</td></tr><tr><td class="">2024-03-29 15:00</td><td class="num">5.70%</td></tr><tr><td class="">2024-03-31 12:00</td><td class="num">5.58%</td></tr><tr><td class="">2024-04-11 20:00</td><td class="num">5.46%</td></tr><tr><td class="">2024-04-12 13:00</td><td class="num">6.01%</td></tr><tr><td class="">2024-05-20 16:00</td><td class="num">5.56%</td></tr><tr><td class="">2024-05-25 16:00</td><td class="num">5.40%</td></tr><tr><td class="">2024-05-29 08:00</td><td class="num">5.88%</td></tr><tr><td class="">2024-05-30 18:00</td><td class="num">5.52%</td></tr><tr><td class="">2024-05-30 20:00</td><td class="num">5.95%</td></tr><tr><td class="">2024-06-11 01:00</td><td class="num">6.35%</td></tr><tr><td class="">2024-06-11 01:00</td><td class="num">6.77%</td></tr><tr><td class="">2024-07-19 15:00</td><td class="num">6.30%</td></tr><tr><td class="">2024-07-23 16:00</td><td class="num">6.72%</td></tr><tr><td class="">2024-07-26 03:00</td><td class="num">6.14%</td></tr><tr><td class="">2024-09-27 06:00</td><td class="num">5.82%</td></tr><tr><td class="">2024-09-30 00:00</td><td class="num">6.22%</td></tr><tr><td class="">2024-10-14 04:00</td><td class="num">5.66%</td></tr><tr><td class="">2024-10-25 01:00</td><td class="num">5.52%</td></tr><tr><td class="">2024-11-01 15:00</td><td class="num">5.93%</td></tr><tr><td class="">2024-11-04 16:00</td><td class="num">6.33%</td></tr><tr><td class="">2024-11-05 15:00</td><td class="num">5.96%</td></tr><tr><td class="">2024-11-13 19:00</td><td class="num">6.82%</td></tr><tr><td class="">2024-11-18 13:00</td><td class="num">7.23%</td></tr><tr><td class="">2024-11-25 09:00</td><td class="num">6.89%</td></tr><tr><td class="">2024-11-25 14:00</td><td class="num">7.29%</td></tr><tr><td class="">2024-12-02 17:00</td><td class="num">7.71%</td></tr><tr><td class="">2024-12-02 17:00</td><td class="num">8.30%</td></tr><tr><td class="">2024-12-04 11:00</td><td class="num">7.76%</td></tr><tr><td class="">2024-12-04 19:00</td><td class="num">7.65%</td></tr><tr><td class="">2024-12-09 03:00</td><td class="num">8.06%</td></tr><tr><td class="">2024-12-11 16:00</td><td class="num">7.42%</td></tr><tr><td class="">2024-12-15 07:00</td><td class="num">7.82%</td></tr></tbody></table>
+  </details>
+</div>
+
+<div class="card">
+  <h2>Resultado por mes</h2>
+  <p class="sub">Revela si la ganancia viene de dos meses buenos y diez planos.
+    Sin el mejor mes (2023-11) el total queda en
+    <strong>-2.38 USDT</strong>.</p>
+  <svg class="chart" viewBox="0 0 760 286" role="img" aria-label="Columnas" data-chart="mo">
+<line class="grid" x1="54" y1="240.0" x2="744" y2="240.0"/>
+<text class="tick" x="46" y="243.5" text-anchor="end">-2</text>
+<line class="grid" x1="54" y1="194.4" x2="744" y2="194.4"/>
+<text class="tick" x="46" y="197.9" text-anchor="end">-1</text>
+<line class="grid" x1="54" y1="148.8" x2="744" y2="148.8"/>
+<text class="tick" x="46" y="152.3" text-anchor="end">-0</text>
+<line class="grid" x1="54" y1="103.2" x2="744" y2="103.2"/>
+<text class="tick" x="46" y="106.7" text-anchor="end">+0</text>
+<line class="grid" x1="54" y1="57.6" x2="744" y2="57.6"/>
+<text class="tick" x="46" y="61.1" text-anchor="end">+0</text>
+<line class="grid" x1="54" y1="12.0" x2="744" y2="12.0"/>
+<text class="tick" x="46" y="15.5" text-anchor="end">+1</text>
+<line class="axis" x1="54" y1="103.2" x2="744" y2="103.2"/>
+<path class="bar pos" d="M60.2,103.2 V71.6 Q60.2,67.6 64.2,67.6 H80.2 Q84.2,67.6 84.2,71.6 V103.2 Z" data-i="0"/>
+<rect class="barhit" x="54.0" y="12" width="36.3" height="228.0" data-i="0" fill="transparent"/>
+<text class="tick" transform="translate(72.2,256) rotate(-45)" text-anchor="end">23-02</text>
+<path class="bar pos" d="M96.5,103.2 V85.4 Q96.5,81.4 100.5,81.4 H116.5 Q120.5,81.4 120.5,85.4 V103.2 Z" data-i="1"/>
+<rect class="barhit" x="90.3" y="12" width="36.3" height="228.0" data-i="1" fill="transparent"/>
+<text class="tick" transform="translate(108.5,256) rotate(-45)" text-anchor="end">23-03</text>
+<path class="bar neg" d="M132.8,103.2 V103.2 Q132.8,104.2 133.8,104.2 H155.8 Q156.8,104.2 156.8,103.2 V103.2 Z" data-i="2"/>
+<rect class="barhit" x="126.6" y="12" width="36.3" height="228.0" data-i="2" fill="transparent"/>
+<text class="tick" transform="translate(144.8,256) rotate(-45)" text-anchor="end">23-04</text>
+<path class="bar pos" d="M169.1,103.2 V103.2 Q169.1,100.3 172.0,100.3 H190.2 Q193.1,100.3 193.1,103.2 V103.2 Z" data-i="3"/>
+<rect class="barhit" x="162.9" y="12" width="36.3" height="228.0" data-i="3" fill="transparent"/>
+<text class="tick" transform="translate(181.1,256) rotate(-45)" text-anchor="end">23-06</text>
+<path class="bar pos" d="M205.4,103.2 V103.2 Q205.4,99.6 209.0,99.6 H225.9 Q229.4,99.6 229.4,103.2 V103.2 Z" data-i="4"/>
+<rect class="barhit" x="199.3" y="12" width="36.3" height="228.0" data-i="4" fill="transparent"/>
+<text class="tick" transform="translate(217.4,256) rotate(-45)" text-anchor="end">23-07</text>
+<path class="bar neg" d="M241.7,103.2 V114.8 Q241.7,118.8 245.7,118.8 H261.7 Q265.7,118.8 265.7,114.8 V103.2 Z" data-i="5"/>
+<rect class="barhit" x="235.6" y="12" width="36.3" height="228.0" data-i="5" fill="transparent"/>
+<text class="tick" transform="translate(253.7,256) rotate(-45)" text-anchor="end">23-10</text>
+<path class="bar pos" d="M278.1,103.2 V66.9 Q278.1,62.9 282.1,62.9 H298.1 Q302.1,62.9 302.1,66.9 V103.2 Z" data-i="6"/>
+<rect class="barhit" x="271.9" y="12" width="36.3" height="228.0" data-i="6" fill="transparent"/>
+<text class="tick" transform="translate(290.1,256) rotate(-45)" text-anchor="end">23-11</text>
+<path class="bar neg" d="M314.4,103.2 V161.2 Q314.4,165.2 318.4,165.2 H334.4 Q338.4,165.2 338.4,161.2 V103.2 Z" data-i="7"/>
+<rect class="barhit" x="308.2" y="12" width="36.3" height="228.0" data-i="7" fill="transparent"/>
+<text class="tick" transform="translate(326.4,256) rotate(-45)" text-anchor="end">23-12</text>
+<path class="bar neg" d="M350.7,103.2 V131.8 Q350.7,135.8 354.7,135.8 H370.7 Q374.7,135.8 374.7,131.8 V103.2 Z" data-i="8"/>
+<rect class="barhit" x="344.5" y="12" width="36.3" height="228.0" data-i="8" fill="transparent"/>
+<text class="tick" transform="translate(362.7,256) rotate(-45)" text-anchor="end">24-01</text>
+<path class="bar pos" d="M387.0,103.2 V86.6 Q387.0,82.6 391.0,82.6 H407.0 Q411.0,82.6 411.0,86.6 V103.2 Z" data-i="9"/>
+<rect class="barhit" x="380.8" y="12" width="36.3" height="228.0" data-i="9" fill="transparent"/>
+<text class="tick" transform="translate(399.0,256) rotate(-45)" text-anchor="end">24-02</text>
+<path class="bar neg" d="M423.3,103.2 V204.9 Q423.3,208.9 427.3,208.9 H443.3 Q447.3,208.9 447.3,204.9 V103.2 Z" data-i="10"/>
+<rect class="barhit" x="417.2" y="12" width="36.3" height="228.0" data-i="10" fill="transparent"/>
+<text class="tick" transform="translate(435.3,256) rotate(-45)" text-anchor="end">24-03</text>
+<path class="bar neg" d="M459.6,103.2 V115.4 Q459.6,119.4 463.6,119.4 H479.6 Q483.6,119.4 483.6,115.4 V103.2 Z" data-i="11"/>
+<rect class="barhit" x="453.5" y="12" width="36.3" height="228.0" data-i="11" fill="transparent"/>
+<text class="tick" transform="translate(471.6,256) rotate(-45)" text-anchor="end">24-04</text>
+<path class="bar pos" d="M495.9,103.2 V103.2 Q495.9,101.0 498.2,101.0 H517.7 Q519.9,101.0 519.9,103.2 V103.2 Z" data-i="12"/>
+<rect class="barhit" x="489.8" y="12" width="36.3" height="228.0" data-i="12" fill="transparent"/>
+<text class="tick" transform="translate(507.9,256) rotate(-45)" text-anchor="end">24-05</text>
+<path class="bar neg" d="M532.3,103.2 V129.8 Q532.3,133.8 536.3,133.8 H552.3 Q556.3,133.8 556.3,129.8 V103.2 Z" data-i="13"/>
+<rect class="barhit" x="526.1" y="12" width="36.3" height="228.0" data-i="13" fill="transparent"/>
+<text class="tick" transform="translate(544.3,256) rotate(-45)" text-anchor="end">24-06</text>
+<path class="bar pos" d="M568.6,103.2 V83.7 Q568.6,79.7 572.6,79.7 H588.6 Q592.6,79.7 592.6,83.7 V103.2 Z" data-i="14"/>
+<rect class="barhit" x="562.4" y="12" width="36.3" height="228.0" data-i="14" fill="transparent"/>
+<text class="tick" transform="translate(580.6,256) rotate(-45)" text-anchor="end">24-07</text>
+<path class="bar neg" d="M604.9,103.2 V103.2 Q604.9,106.3 608.0,106.3 H625.8 Q628.9,106.3 628.9,103.2 V103.2 Z" data-i="15"/>
+<rect class="barhit" x="598.7" y="12" width="36.3" height="228.0" data-i="15" fill="transparent"/>
+<text class="tick" transform="translate(616.9,256) rotate(-45)" text-anchor="end">24-09</text>
+<path class="bar pos" d="M641.2,103.2 V80.7 Q641.2,76.7 645.2,76.7 H661.2 Q665.2,76.7 665.2,80.7 V103.2 Z" data-i="16"/>
+<rect class="barhit" x="635.1" y="12" width="36.3" height="228.0" data-i="16" fill="transparent"/>
+<text class="tick" transform="translate(653.2,256) rotate(-45)" text-anchor="end">24-10</text>
+<path class="bar neg" d="M677.5,103.2 V165.9 Q677.5,169.9 681.5,169.9 H697.5 Q701.5,169.9 701.5,165.9 V103.2 Z" data-i="17"/>
+<rect class="barhit" x="671.4" y="12" width="36.3" height="228.0" data-i="17" fill="transparent"/>
+<text class="tick" transform="translate(689.5,256) rotate(-45)" text-anchor="end">24-11</text>
+<path class="bar neg" d="M713.8,103.2 V119.2 Q713.8,123.2 717.8,123.2 H733.8 Q737.8,123.2 737.8,119.2 V103.2 Z" data-i="18"/>
+<rect class="barhit" x="707.7" y="12" width="36.3" height="228.0" data-i="18" fill="transparent"/>
+<text class="tick" transform="translate(725.8,256) rotate(-45)" text-anchor="end">24-12</text>
+</svg>
+  <div class="legend">
+    <span><i class="key sq" style="background:var(--pos)"></i>Mes positivo</span>
+    <span><i class="key sq" style="background:var(--neg)"></i>Mes negativo</span>
+  </div>
+  <details><summary>Ver los datos en tabla</summary>
+    <table><thead><tr><th class="">Mes</th><th class="num">Operaciones</th><th class="num">P/L USDT</th></tr></thead><tbody><tr><td class="">2023-02</td><td class="num">7</td><td class="num">+0.39</td></tr><tr><td class="">2023-03</td><td class="num">3</td><td class="num">+0.24</td></tr><tr><td class="">2023-04</td><td class="num">8</td><td class="num">-0.01</td></tr><tr><td class="">2023-06</td><td class="num">2</td><td class="num">+0.03</td></tr><tr><td class="">2023-07</td><td class="num">6</td><td class="num">+0.04</td></tr><tr><td class="">2023-10</td><td class="num">1</td><td class="num">-0.17</td></tr><tr><td class="">2023-11</td><td class="num">10</td><td class="num">+0.44</td></tr><tr><td class="">2023-12</td><td class="num">12</td><td class="num">-0.68</td></tr><tr><td class="">2024-01</td><td class="num">5</td><td class="num">-0.36</td></tr><tr><td class="">2024-02</td><td class="num">8</td><td class="num">+0.23</td></tr><tr><td class="">2024-03</td><td class="num">9</td><td class="num">-1.16</td></tr><tr><td class="">2024-04</td><td class="num">2</td><td class="num">-0.18</td></tr><tr><td class="">2024-05</td><td class="num">5</td><td class="num">+0.02</td></tr><tr><td class="">2024-06</td><td class="num">2</td><td class="num">-0.34</td></tr><tr><td class="">2024-07</td><td class="num">3</td><td class="num">+0.26</td></tr><tr><td class="">2024-09</td><td class="num">2</td><td class="num">-0.03</td></tr><tr><td class="">2024-10</td><td class="num">2</td><td class="num">+0.29</td></tr><tr><td class="">2024-11</td><td class="num">7</td><td class="num">-0.73</td></tr><tr><td class="">2024-12</td><td class="num">7</td><td class="num">-0.22</td></tr></tbody></table>
+  </details>
+</div>
+
+<div class="card">
+  <h2>Distribucion del resultado por operacion</h2>
+  <p class="sub">Cuantas operaciones caen en cada rango de rentabilidad.
+    Una cola izquierda larga significa que las perdidas corren mas que las ganancias,
+    aunque el win rate parezca bueno.</p>
+  <svg class="chart" viewBox="0 0 760 286" role="img" aria-label="Columnas" data-chart="hi">
+<line class="grid" x1="54" y1="240.0" x2="744" y2="240.0"/>
+<text class="tick" x="46" y="243.5" text-anchor="end">-10</text>
+<line class="grid" x1="54" y1="194.4" x2="744" y2="194.4"/>
+<text class="tick" x="46" y="197.9" text-anchor="end">0</text>
+<line class="grid" x1="54" y1="148.8" x2="744" y2="148.8"/>
+<text class="tick" x="46" y="152.3" text-anchor="end">10</text>
+<line class="grid" x1="54" y1="103.2" x2="744" y2="103.2"/>
+<text class="tick" x="46" y="106.7" text-anchor="end">20</text>
+<line class="grid" x1="54" y1="57.6" x2="744" y2="57.6"/>
+<text class="tick" x="46" y="61.1" text-anchor="end">30</text>
+<line class="grid" x1="54" y1="12.0" x2="744" y2="12.0"/>
+<text class="tick" x="46" y="15.5" text-anchor="end">40</text>
+<line class="axis" x1="54" y1="194.4" x2="744" y2="194.4"/>
+<path class="bar pos" d="M65.0,194.4 V189.3 Q65.0,185.3 69.0,185.3 H85.0 Q89.0,185.3 89.0,189.3 V194.4 Z" data-i="0"/>
+<rect class="barhit" x="54.0" y="12" width="46.0" height="228.0" data-i="0" fill="transparent"/>
+<text class="tick" transform="translate(77.0,256) rotate(-45)" text-anchor="end">-4%</text>
+<path class="bar pos" d="M111.0,194.4 V189.3 Q111.0,185.3 115.0,185.3 H131.0 Q135.0,185.3 135.0,189.3 V194.4 Z" data-i="1"/>
+<rect class="barhit" x="100.0" y="12" width="46.0" height="228.0" data-i="1" fill="transparent"/>
+<text class="tick" transform="translate(123.0,256) rotate(-45)" text-anchor="end">-3%</text>
+<path class="bar pos" d="M157.0,194.4 V180.2 Q157.0,176.2 161.0,176.2 H177.0 Q181.0,176.2 181.0,180.2 V194.4 Z" data-i="2"/>
+<rect class="barhit" x="146.0" y="12" width="46.0" height="228.0" data-i="2" fill="transparent"/>
+<text class="tick" transform="translate(169.0,256) rotate(-45)" text-anchor="end">-3%</text>
+<path class="bar pos" d="M203.0,194.4 V139.1 Q203.0,135.1 207.0,135.1 H223.0 Q227.0,135.1 227.0,139.1 V194.4 Z" data-i="3"/>
+<rect class="barhit" x="192.0" y="12" width="46.0" height="228.0" data-i="3" fill="transparent"/>
+<text class="tick" transform="translate(215.0,256) rotate(-45)" text-anchor="end">-2%</text>
+<path class="bar pos" d="M249.0,194.4 V70.7 Q249.0,66.7 253.0,66.7 H269.0 Q273.0,66.7 273.0,70.7 V194.4 Z" data-i="4"/>
+<rect class="barhit" x="238.0" y="12" width="46.0" height="228.0" data-i="4" fill="transparent"/>
+<text class="tick" transform="translate(261.0,256) rotate(-45)" text-anchor="end">-2%</text>
+<path class="bar pos" d="M341.0,194.4 V193.8 Q341.0,189.8 345.0,189.8 H361.0 Q365.0,189.8 365.0,193.8 V194.4 Z" data-i="6"/>
+<rect class="barhit" x="330.0" y="12" width="46.0" height="228.0" data-i="6" fill="transparent"/>
+<text class="tick" transform="translate(353.0,256) rotate(-45)" text-anchor="end">-1%</text>
+<path class="bar pos" d="M433.0,194.4 V125.4 Q433.0,121.4 437.0,121.4 H453.0 Q457.0,121.4 457.0,125.4 V194.4 Z" data-i="8"/>
+<rect class="barhit" x="422.0" y="12" width="46.0" height="228.0" data-i="8" fill="transparent"/>
+<text class="tick" transform="translate(445.0,256) rotate(-45)" text-anchor="end">+1%</text>
+<path class="bar pos" d="M479.0,194.4 V175.6 Q479.0,171.6 483.0,171.6 H499.0 Q503.0,171.6 503.0,175.6 V194.4 Z" data-i="9"/>
+<rect class="barhit" x="468.0" y="12" width="46.0" height="228.0" data-i="9" fill="transparent"/>
+<text class="tick" transform="translate(491.0,256) rotate(-45)" text-anchor="end">+1%</text>
+<path class="bar pos" d="M525.0,194.4 V161.9 Q525.0,157.9 529.0,157.9 H545.0 Q549.0,157.9 549.0,161.9 V194.4 Z" data-i="10"/>
+<rect class="barhit" x="514.0" y="12" width="46.0" height="228.0" data-i="10" fill="transparent"/>
+<text class="tick" transform="translate(537.0,256) rotate(-45)" text-anchor="end">+2%</text>
+<path class="bar pos" d="M571.0,194.4 V134.6 Q571.0,130.6 575.0,130.6 H591.0 Q595.0,130.6 595.0,134.6 V194.4 Z" data-i="11"/>
+<rect class="barhit" x="560.0" y="12" width="46.0" height="228.0" data-i="11" fill="transparent"/>
+<text class="tick" transform="translate(583.0,256) rotate(-45)" text-anchor="end">+2%</text>
+<path class="bar pos" d="M617.0,194.4 V171.0 Q617.0,167.0 621.0,167.0 H637.0 Q641.0,167.0 641.0,171.0 V194.4 Z" data-i="12"/>
+<rect class="barhit" x="606.0" y="12" width="46.0" height="228.0" data-i="12" fill="transparent"/>
+<text class="tick" transform="translate(629.0,256) rotate(-45)" text-anchor="end">+3%</text>
+<path class="bar pos" d="M663.0,194.4 V193.8 Q663.0,189.8 667.0,189.8 H683.0 Q687.0,189.8 687.0,193.8 V194.4 Z" data-i="13"/>
+<rect class="barhit" x="652.0" y="12" width="46.0" height="228.0" data-i="13" fill="transparent"/>
+<text class="tick" transform="translate(675.0,256) rotate(-45)" text-anchor="end">+3%</text>
+<path class="bar pos" d="M709.0,194.4 V193.8 Q709.0,189.8 713.0,189.8 H729.0 Q733.0,189.8 733.0,193.8 V194.4 Z" data-i="14"/>
+<rect class="barhit" x="698.0" y="12" width="46.0" height="228.0" data-i="14" fill="transparent"/>
+<text class="tick" transform="translate(721.0,256) rotate(-45)" text-anchor="end">+4%</text>
+</svg>
+  <div class="legend">
+    <span><i class="key sq" style="background:var(--pos)"></i>Ganancia</span>
+    <span><i class="key sq" style="background:var(--neg)"></i>Perdida</span>
+  </div>
+  <details><summary>Ver los datos en tabla</summary>
+    <table><thead><tr><th class="">Rango</th><th class="num">Operaciones</th></tr></thead><tbody><tr><td class="">-3.8% a -3.3%</td><td class="num">2</td></tr><tr><td class="">-3.3% a -2.8%</td><td class="num">2</td></tr><tr><td class="">-2.8% a -2.3%</td><td class="num">4</td></tr><tr><td class="">-2.3% a -1.8%</td><td class="num">13</td></tr><tr><td class="">-1.8% a -1.3%</td><td class="num">28</td></tr><tr><td class="">-1.3% a -0.8%</td><td class="num">0</td></tr><tr><td class="">-0.8% a -0.3%</td><td class="num">1</td></tr><tr><td class="">-0.3% a +0.3%</td><td class="num">0</td></tr><tr><td class="">+0.3% a +0.8%</td><td class="num">16</td></tr><tr><td class="">+0.8% a +1.3%</td><td class="num">5</td></tr><tr><td class="">+1.3% a +1.8%</td><td class="num">8</td></tr><tr><td class="">+1.8% a +2.3%</td><td class="num">14</td></tr><tr><td class="">+2.3% a +2.8%</td><td class="num">6</td></tr><tr><td class="">+2.8% a +3.3%</td><td class="num">1</td></tr><tr><td class="">+3.3% a +3.8%</td><td class="num">1</td></tr></tbody></table>
+  </details>
+</div>
+
+<div class="card">
+  <h2>Comparativa contra comprar y mantener</h2>
+  <table><thead><tr><th class=""></th><th class="num">TrendPullbackV1</th><th class="num">Buy &amp; hold BTC</th></tr></thead><tbody><tr><td class="">Profit total</td><td class="num">-4.8%</td><td class="num">+304.4%</td></tr><tr><td class="">Max drawdown</td><td class="num">8.3%</td><td class="num"><span class="muted">no medible</span></td></tr><tr><td class="">Profit / drawdown</td><td class="num">-0.58</td><td class="num"><span class="muted">&mdash;</span></td></tr><tr><td class="">Operaciones</td><td class="num">101</td><td class="num">1</td></tr><tr><td class="">Tiempo expuesto</td><td class="num">parcial</td><td class="num">100%</td></tr></tbody></table><p class="sub" style="margin-top:12px">El buy &amp; hold cierra una sola operacion, asi que su curva de capital tiene un unico punto de cierre y el drawdown calculado saldria 0% <em>por construccion</em>, no porque no lo haya tenido. Se marca como no medible en vez de publicar un cero falso: para medirlo de verdad hace falta la serie de precios, no la lista de operaciones.</p>
+</div>
+
+<div class="card">
+  <h2>Por par</h2>
+  <table><thead><tr><th class="">Par</th><th class="num">Operaciones</th><th class="num">Win rate</th><th class="num">P/L USDT</th></tr></thead><tbody><tr><td class="">BTC/USDT</td><td class="num">54</td><td class="num">54%</td><td class="num">-0.53</td></tr><tr><td class="">ETH/USDT</td><td class="num">47</td><td class="num">47%</td><td class="num">-1.41</td></tr></tbody></table>
+</div>
+
+<div class="card">
+  <h2>Por motivo de salida</h2>
+  <p class="sub">La pregunta clave: ¿de donde sale el dinero? Si casi todo el profit
+    viene de <code>roi</code> y las salidas por senal son todas perdidas, la senal de
+    salida no aporta y la estrategia es en realidad "comprar y esperar el ROI".</p>
+  <table><thead><tr><th class="">Motivo</th><th class="num">Operaciones</th><th class="num">Win rate</th><th class="num">P/L USDT</th></tr></thead><tbody><tr><td class="">rsi_overbought</td><td class="num">19</td><td class="num">100%</td><td class="num">+3.71</td></tr><tr><td class="">roi</td><td class="num">29</td><td class="num">100%</td><td class="num">+3.42</td></tr><tr><td class="">trailing_stop_loss</td><td class="num">53</td><td class="num">6%</td><td class="num">-9.07</td></tr></tbody></table>
+</div>
+
+<footer>
+  <p>Generado por <code>scripts/report.py</code> desde
+    <code>user_data/backtest_results\backtest-result-2026-10-20_16-50-14.zip</code>. Todas las metricas se calculan desde la lista
+    de operaciones exportada, no se leen de los campos agregados del JSON.</p>
+  <p>El drawdown se calcula sobre la curva de capital en los <em>cierres</em> de
+    operacion, igual que lo hace Freqtrade. Las caidas que ocurren con una posicion
+    abierta y que luego se recuperan antes de cerrar no aparecen: el drawdown real
+    vivido es algo mayor que el que se muestra aqui.</p>
+  <p>Freqtrade no simula slippage: asume llenado al precio de la vela, asi que este
+    resultado es optimista. Repite con <code>make stress</code> (comisiones al 0.15% y
+    0.2% por lado) antes de darlo por bueno.
+    Un backtest validado no predice el futuro.</p>
+  <p><a href="https://github.com/Maykhol10/freqtrade-quant">freqtrade-quant</a> ·
+    Documentacion de investigacion, no asesoria financiera.</p>
+</footer>
+
+</div>
+<div id="tip" role="status" aria-live="polite"></div>
+<script type="application/json" id="chartdata">{"eq": {"kind": "series", "px": [54.0, 57.2, 60.7, 60.9, 63.1, 63.1, 66.7, 69.9, 98.0, 100.1, 103.6, 103.7, 106.4, 107.3, 110.8, 113.5, 118.8, 128.4, 190.1, 193.7, 199.1, 204.6, 204.7, 207.6, 211.8, 214.5, 316.9, 325.0, 328.4, 329.6, 336.5, 336.8, 340.6, 342.8, 343.7, 348.2, 348.4, 360.0, 362.6, 365.8, 368.7, 369.7, 369.7, 370.8, 371.4, 372.6, 378.2, 378.2, 383.8, 389.5, 392.1, 394.3, 400.2, 405.8, 420.1, 421.0, 428.1, 429.8, 434.5, 434.5, 438.3, 442.5, 451.3, 452.5, 456.8, 458.9, 461.2, 464.0, 464.5, 475.4, 477.4, 489.0, 489.8, 529.1, 534.2, 538.0, 539.4, 539.5, 551.1, 551.1, 590.8, 595.0, 597.5, 662.6, 665.4, 680.0, 691.2, 699.0, 702.1, 703.1, 711.5, 716.4, 723.5, 723.7, 731.0, 731.0, 732.8, 733.2, 737.6, 740.3, 744.0], "py": [170.2, 170.0, 169.8, 169.8, 170.0, 170.1, 170.0, 169.8, 169.6, 169.8, 169.9, 170.1, 170.3, 170.4, 170.3, 170.1, 170.0, 169.8, 170.0, 169.8, 169.9, 169.9, 169.7, 169.6, 169.8, 169.7, 169.9, 169.8, 169.7, 169.7, 169.5, 169.3, 169.2, 169.4, 169.1, 169.3, 169.5, 169.4, 169.6, 169.4, 169.5, 169.7, 169.9, 169.5, 169.7, 169.8, 170.0, 170.2, 170.1, 170.3, 170.0, 170.3, 170.3, 170.5, 170.6, 170.8, 170.7, 170.5, 170.5, 170.3, 170.5, 170.3, 170.3, 170.2, 170.1, 170.3, 170.7, 171.0, 171.2, 171.4, 171.4, 171.4, 171.6, 171.4, 171.3, 171.5, 171.4, 171.6, 171.7, 171.9, 171.7, 171.9, 171.6, 171.5, 171.7, 171.4, 171.4, 171.5, 171.7, 171.6, 171.9, 172.1, 171.9, 172.1, 172.3, 172.5, 172.3, 172.2, 172.4, 172.2, 172.3], "label": ["2023-02-14 14:00", "2023-02-17 17:00", "2023-02-21 02:00", "2023-02-21 06:00", "2023-02-23 11:00", "2023-02-23 11:00", "2023-02-26 21:00", "2023-03-02 00:00", "2023-03-29 07:00", "2023-03-31 07:00", "2023-04-03 17:00", "2023-04-03 20:00", "2023-04-06 10:00", "2023-04-07 07:00", "2023-04-10 17:00", "2023-04-13 08:00", "2023-04-18 12:00", "2023-04-27 20:00", "2023-06-26 16:00", "2023-06-30 04:00", "2023-07-05 10:00", "2023-07-10 18:00", "2023-07-10 20:00", "2023-07-13 15:00", "2023-07-17 17:00", "2023-07-20 08:00", "2023-10-27 17:00", "2023-11-04 14:00", "2023-11-07 21:00", "2023-11-09 02:00", "2023-11-15 18:00", "2023-11-16 01:00", "2023-11-19 17:00", "2023-11-21 22:00", "2023-11-22 19:00", "2023-11-27 03:00", "2023-11-27 07:00", "2023-12-08 13:00", "2023-12-11 02:00", "2023-12-14 06:00", "2023-12-17 01:00", "2023-12-17 23:00", "2023-12-17 23:00", "2023-12-19 02:00", "2023-12-19 15:00", "2023-12-20 20:00", "2023-12-26 05:00", "2023-12-26 05:00", "2023-12-31 16:00", "2024-01-06 05:00", "2024-01-08 18:00", "2024-01-10 20:00", "2024-01-16 15:00", "2024-01-22 01:00", "2024-02-04 22:00", "2024-02-05 20:00", "2024-02-12 16:00", "2024-02-14 08:00", "2024-02-18 22:00", "2024-02-18 22:00", "2024-02-22 13:00", "2024-02-26 16:00", "2024-03-06 05:00", "2024-03-07 08:00", "2024-03-11 13:00", "2024-03-13 13:00", "2024-03-15 20:00", "2024-03-18 13:00", "2024-03-19 01:00", "2024-03-29 15:00", "2024-03-31 12:00", "2024-04-11 20:00", "2024-04-12 13:00", "2024-05-20 16:00", "2024-05-25 16:00", "2024-05-29 08:00", "2024-05-30 18:00", "2024-05-30 20:00", "2024-06-11 01:00", "2024-06-11 01:00", "2024-07-19 15:00", "2024-07-23 16:00", "2024-07-26 03:00", "2024-09-27 06:00", "2024-09-30 00:00", "2024-10-14 04:00", "2024-10-25 01:00", "2024-11-01 15:00", "2024-11-04 16:00", "2024-11-05 15:00", "2024-11-13 19:00", "2024-11-18 13:00", "2024-11-25 09:00", "2024-11-25 14:00", "2024-12-02 17:00", "2024-12-02 17:00", "2024-12-04 11:00", "2024-12-04 19:00", "2024-12-09 03:00", "2024-12-11 16:00", "2024-12-15 07:00"], "text": ["Rentabilidad +0.49%<br>Capital 40.20 USDT<br>operacion 1 de 101", "Rentabilidad +0.98%<br>Capital 40.39 USDT<br>operacion 2 de 101", "Rentabilidad +1.47%<br>Capital 40.59 USDT<br>operacion 3 de 101", "Rentabilidad +1.59%<br>Capital 40.64 USDT<br>operacion 4 de 101", "Rentabilidad +1.14%<br>Capital 40.45 USDT<br>operacion 5 de 101", "Rentabilidad +0.65%<br>Capital 40.26 USDT<br>operacion 6 de 101", "Rentabilidad +0.98%<br>Capital 40.39 USDT<br>operacion 7 de 101", "Rentabilidad +1.48%<br>Capital 40.59 USDT<br>operacion 8 de 101", "Rentabilidad +2.06%<br>Capital 40.83 USDT<br>operacion 9 de 101", "Rentabilidad +1.57%<br>Capital 40.63 USDT<br>operacion 10 de 101", "Rentabilidad +1.15%<br>Capital 40.46 USDT<br>operacion 11 de 101", "Rentabilidad +0.73%<br>Capital 40.29 USDT<br>operacion 12 de 101", "Rentabilidad +0.31%<br>Capital 40.12 USDT<br>operacion 13 de 101", "Rentabilidad -0.11%<br>Capital 39.95 USDT<br>operacion 14 de 101", "Rentabilidad +0.20%<br>Capital 40.08 USDT<br>operacion 15 de 101", "Rentabilidad +0.70%<br>Capital 40.28 USDT<br>operacion 16 de 101", "Rentabilidad +1.05%<br>Capital 40.42 USDT<br>operacion 17 de 101", "Rentabilidad +1.55%<br>Capital 40.62 USDT<br>operacion 18 de 101", "Rentabilidad +1.13%<br>Capital 40.45 USDT<br>operacion 19 de 101", "Rentabilidad +1.63%<br>Capital 40.65 USDT<br>operacion 20 de 101", "Rentabilidad +1.21%<br>Capital 40.48 USDT<br>operacion 21 de 101", "Rentabilidad +1.33%<br>Capital 40.53 USDT<br>operacion 22 de 101", "Rentabilidad +1.77%<br>Capital 40.71 USDT<br>operacion 23 de 101", "Rentabilidad +2.01%<br>Capital 40.80 USDT<br>operacion 24 de 101", "Rentabilidad +1.60%<br>Capital 40.64 USDT<br>operacion 25 de 101", "Rentabilidad +1.72%<br>Capital 40.69 USDT<br>operacion 26 de 101", "Rentabilidad +1.29%<br>Capital 40.52 USDT<br>operacion 27 de 101", "Rentabilidad +1.63%<br>Capital 40.65 USDT<br>operacion 28 de 101", "Rentabilidad +1.75%<br>Capital 40.70 USDT<br>operacion 29 de 101", "Rentabilidad +1.87%<br>Capital 40.75 USDT<br>operacion 30 de 101", "Rentabilidad +2.16%<br>Capital 40.87 USDT<br>operacion 31 de 101", "Rentabilidad +2.79%<br>Capital 41.12 USDT<br>operacion 32 de 101", "Rentabilidad +2.91%<br>Capital 41.16 USDT<br>operacion 33 de 101", "Rentabilidad +2.43%<br>Capital 40.97 USDT<br>operacion 34 de 101", "Rentabilidad +3.24%<br>Capital 41.29 USDT<br>operacion 35 de 101", "Rentabilidad +2.81%<br>Capital 41.13 USDT<br>operacion 36 de 101", "Rentabilidad +2.40%<br>Capital 40.96 USDT<br>operacion 37 de 101", "Rentabilidad +2.54%<br>Capital 41.02 USDT<br>operacion 38 de 101", "Rentabilidad +2.12%<br>Capital 40.85 USDT<br>operacion 39 de 101", "Rentabilidad +2.62%<br>Capital 41.05 USDT<br>operacion 40 de 101", "Rentabilidad +2.20%<br>Capital 40.88 USDT<br>operacion 41 de 101", "Rentabilidad +1.78%<br>Capital 40.71 USDT<br>operacion 42 de 101", "Rentabilidad +1.37%<br>Capital 40.55 USDT<br>operacion 43 de 101", "Rentabilidad +2.32%<br>Capital 40.93 USDT<br>operacion 44 de 101", "Rentabilidad +1.86%<br>Capital 40.75 USDT<br>operacion 45 de 101", "Rentabilidad +1.40%<br>Capital 40.56 USDT<br>operacion 46 de 101", "Rentabilidad +0.99%<br>Capital 40.39 USDT<br>operacion 47 de 101", "Rentabilidad +0.58%<br>Capital 40.23 USDT<br>operacion 48 de 101", "Rentabilidad +0.70%<br>Capital 40.28 USDT<br>operacion 49 de 101", "Rentabilidad +0.22%<br>Capital 40.09 USDT<br>operacion 50 de 101", "Rentabilidad +0.90%<br>Capital 40.36 USDT<br>operacion 51 de 101", "Rentabilidad +0.18%<br>Capital 40.07 USDT<br>operacion 52 de 101", "Rentabilidad +0.31%<br>Capital 40.12 USDT<br>operacion 53 de 101", "Rentabilidad -0.19%<br>Capital 39.92 USDT<br>operacion 54 de 101", "Rentabilidad -0.61%<br>Capital 39.75 USDT<br>operacion 55 de 101", "Rentabilidad -1.03%<br>Capital 39.59 USDT<br>operacion 56 de 101", "Rentabilidad -0.79%<br>Capital 39.68 USDT<br>operacion 57 de 101", "Rentabilidad -0.30%<br>Capital 39.88 USDT<br>operacion 58 de 101", "Rentabilidad -0.18%<br>Capital 39.93 USDT<br>operacion 59 de 101", "Rentabilidad +0.31%<br>Capital 40.12 USDT<br>operacion 60 de 101", "Rentabilidad -0.13%<br>Capital 39.95 USDT<br>operacion 61 de 101", "Rentabilidad +0.37%<br>Capital 40.15 USDT<br>operacion 62 de 101", "Rentabilidad +0.31%<br>Capital 40.12 USDT<br>operacion 63 de 101", "Rentabilidad +0.43%<br>Capital 40.17 USDT<br>operacion 64 de 101", "Rentabilidad +0.70%<br>Capital 40.28 USDT<br>operacion 65 de 101", "Rentabilidad +0.14%<br>Capital 40.06 USDT<br>operacion 66 de 101", "Rentabilidad -0.78%<br>Capital 39.69 USDT<br>operacion 67 de 101", "Rentabilidad -1.51%<br>Capital 39.40 USDT<br>operacion 68 de 101", "Rentabilidad -2.14%<br>Capital 39.14 USDT<br>operacion 69 de 101", "Rentabilidad -2.65%<br>Capital 38.94 USDT<br>operacion 70 de 101", "Rentabilidad -2.53%<br>Capital 38.99 USDT<br>operacion 71 de 101", "Rentabilidad -2.40%<br>Capital 39.04 USDT<br>operacion 72 de 101", "Rentabilidad -2.97%<br>Capital 38.81 USDT<br>operacion 73 de 101", "Rentabilidad -2.50%<br>Capital 39.00 USDT<br>operacion 74 de 101", "Rentabilidad -2.34%<br>Capital 39.06 USDT<br>operacion 75 de 101", "Rentabilidad -2.83%<br>Capital 38.87 USDT<br>operacion 76 de 101", "Rentabilidad -2.46%<br>Capital 39.02 USDT<br>operacion 77 de 101", "Rentabilidad -2.91%<br>Capital 38.84 USDT<br>operacion 78 de 101", "Rentabilidad -3.32%<br>Capital 38.67 USDT<br>operacion 79 de 101", "Rentabilidad -3.75%<br>Capital 38.50 USDT<br>operacion 80 de 101", "Rentabilidad -3.26%<br>Capital 38.69 USDT<br>operacion 81 de 101", "Rentabilidad -3.70%<br>Capital 38.52 USDT<br>operacion 82 de 101", "Rentabilidad -3.10%<br>Capital 38.76 USDT<br>operacion 83 de 101", "Rentabilidad -2.77%<br>Capital 38.89 USDT<br>operacion 84 de 101", "Rentabilidad -3.19%<br>Capital 38.72 USDT<br>operacion 85 de 101", "Rentabilidad -2.61%<br>Capital 38.96 USDT<br>operacion 86 de 101", "Rentabilidad -2.46%<br>Capital 39.02 USDT<br>operacion 87 de 101", "Rentabilidad -2.88%<br>Capital 38.85 USDT<br>operacion 88 de 101", "Rentabilidad -3.30%<br>Capital 38.68 USDT<br>operacion 89 de 101", "Rentabilidad -2.92%<br>Capital 38.83 USDT<br>operacion 90 de 101", "Rentabilidad -3.80%<br>Capital 38.48 USDT<br>operacion 91 de 101", "Rentabilidad -4.23%<br>Capital 38.31 USDT<br>operacion 92 de 101", "Rentabilidad -3.87%<br>Capital 38.45 USDT<br>operacion 93 de 101", "Rentabilidad -4.29%<br>Capital 38.28 USDT<br>operacion 94 de 101", "Rentabilidad -4.73%<br>Capital 38.11 USDT<br>operacion 95 de 101", "Rentabilidad -5.33%<br>Capital 37.87 USDT<br>operacion 96 de 101", "Rentabilidad -4.78%<br>Capital 38.09 USDT<br>operacion 97 de 101", "Rentabilidad -4.66%<br>Capital 38.14 USDT<br>operacion 98 de 101", "Rentabilidad -5.08%<br>Capital 37.97 USDT<br>operacion 99 de 101", "Rentabilidad -4.43%<br>Capital 38.23 USDT<br>operacion 100 de 101", "Rentabilidad -4.84%<br>Capital 38.06 USDT<br>operacion 101 de 101"]}, "dd": {"kind": "series", "px": [54.0, 57.2, 60.7, 60.9, 63.1, 63.1, 66.7, 69.9, 98.0, 100.1, 103.6, 103.7, 106.4, 107.3, 110.8, 113.5, 118.8, 128.4, 190.1, 193.7, 199.1, 204.6, 204.7, 207.6, 211.8, 214.5, 316.9, 325.0, 328.4, 329.6, 336.5, 336.8, 340.6, 342.8, 343.7, 348.2, 348.4, 360.0, 362.6, 365.8, 368.7, 369.7, 369.7, 370.8, 371.4, 372.6, 378.2, 378.2, 383.8, 389.5, 392.1, 394.3, 400.2, 405.8, 420.1, 421.0, 428.1, 429.8, 434.5, 434.5, 438.3, 442.5, 451.3, 452.5, 456.8, 458.9, 461.2, 464.0, 464.5, 475.4, 477.4, 489.0, 489.8, 529.1, 534.2, 538.0, 539.4, 539.5, 551.1, 551.1, 590.8, 595.0, 597.5, 662.6, 665.4, 680.0, 691.2, 699.0, 702.1, 703.1, 711.5, 716.4, 723.5, 723.7, 731.0, 731.0, 732.8, 733.2, 737.6, 740.3, 744.0], "py": [45.0, 45.0, 45.0, 45.0, 52.5, 60.4, 55.1, 46.9, 45.0, 52.9, 59.7, 66.6, 73.3, 80.2, 75.2, 67.1, 61.4, 53.3, 60.0, 52.1, 58.9, 56.9, 49.7, 45.8, 52.5, 50.5, 57.4, 52.1, 50.1, 48.2, 45.0, 45.0, 45.0, 52.7, 45.0, 51.8, 58.4, 56.1, 62.8, 54.8, 61.6, 68.2, 74.8, 59.6, 67.0, 74.3, 81.0, 87.5, 85.5, 93.1, 82.3, 93.8, 91.8, 99.8, 106.5, 113.3, 109.4, 101.6, 99.6, 91.9, 98.8, 90.8, 91.8, 89.8, 85.5, 94.5, 109.3, 120.8, 131.0, 139.1, 137.1, 135.1, 144.2, 136.7, 134.1, 142.0, 136.1, 143.2, 149.8, 156.6, 148.9, 155.8, 146.3, 141.0, 147.7, 138.4, 136.1, 142.8, 149.4, 143.3, 157.5, 164.3, 158.7, 165.3, 172.3, 182.0, 173.1, 171.2, 177.9, 167.5, 174.1], "label": ["2023-02-14 14:00", "2023-02-17 17:00", "2023-02-21 02:00", "2023-02-21 06:00", "2023-02-23 11:00", "2023-02-23 11:00", "2023-02-26 21:00", "2023-03-02 00:00", "2023-03-29 07:00", "2023-03-31 07:00", "2023-04-03 17:00", "2023-04-03 20:00", "2023-04-06 10:00", "2023-04-07 07:00", "2023-04-10 17:00", "2023-04-13 08:00", "2023-04-18 12:00", "2023-04-27 20:00", "2023-06-26 16:00", "2023-06-30 04:00", "2023-07-05 10:00", "2023-07-10 18:00", "2023-07-10 20:00", "2023-07-13 15:00", "2023-07-17 17:00", "2023-07-20 08:00", "2023-10-27 17:00", "2023-11-04 14:00", "2023-11-07 21:00", "2023-11-09 02:00", "2023-11-15 18:00", "2023-11-16 01:00", "2023-11-19 17:00", "2023-11-21 22:00", "2023-11-22 19:00", "2023-11-27 03:00", "2023-11-27 07:00", "2023-12-08 13:00", "2023-12-11 02:00", "2023-12-14 06:00", "2023-12-17 01:00", "2023-12-17 23:00", "2023-12-17 23:00", "2023-12-19 02:00", "2023-12-19 15:00", "2023-12-20 20:00", "2023-12-26 05:00", "2023-12-26 05:00", "2023-12-31 16:00", "2024-01-06 05:00", "2024-01-08 18:00", "2024-01-10 20:00", "2024-01-16 15:00", "2024-01-22 01:00", "2024-02-04 22:00", "2024-02-05 20:00", "2024-02-12 16:00", "2024-02-14 08:00", "2024-02-18 22:00", "2024-02-18 22:00", "2024-02-22 13:00", "2024-02-26 16:00", "2024-03-06 05:00", "2024-03-07 08:00", "2024-03-11 13:00", "2024-03-13 13:00", "2024-03-15 20:00", "2024-03-18 13:00", "2024-03-19 01:00", "2024-03-29 15:00", "2024-03-31 12:00", "2024-04-11 20:00", "2024-04-12 13:00", "2024-05-20 16:00", "2024-05-25 16:00", "2024-05-29 08:00", "2024-05-30 18:00", "2024-05-30 20:00", "2024-06-11 01:00", "2024-06-11 01:00", "2024-07-19 15:00", "2024-07-23 16:00", "2024-07-26 03:00", "2024-09-27 06:00", "2024-09-30 00:00", "2024-10-14 04:00", "2024-10-25 01:00", "2024-11-01 15:00", "2024-11-04 16:00", "2024-11-05 15:00", "2024-11-13 19:00", "2024-11-18 13:00", "2024-11-25 09:00", "2024-11-25 14:00", "2024-12-02 17:00", "2024-12-02 17:00", "2024-12-04 11:00", "2024-12-04 19:00", "2024-12-09 03:00", "2024-12-11 16:00", "2024-12-15 07:00"], "text": ["Drawdown 0.00%", "Drawdown 0.00%", "Drawdown 0.00%", "Drawdown 0.00%", "Drawdown 0.45%", "Drawdown 0.93%", "Drawdown 0.61%", "Drawdown 0.12%", "Drawdown 0.00%", "Drawdown 0.48%", "Drawdown 0.89%", "Drawdown 1.31%", "Drawdown 1.72%", "Drawdown 2.13%", "Drawdown 1.83%", "Drawdown 1.34%", "Drawdown 1.00%", "Drawdown 0.51%", "Drawdown 0.91%", "Drawdown 0.43%", "Drawdown 0.84%", "Drawdown 0.72%", "Drawdown 0.28%", "Drawdown 0.05%", "Drawdown 0.45%", "Drawdown 0.33%", "Drawdown 0.75%", "Drawdown 0.43%", "Drawdown 0.31%", "Drawdown 0.19%", "Drawdown 0.00%", "Drawdown 0.00%", "Drawdown 0.00%", "Drawdown 0.47%", "Drawdown 0.00%", "Drawdown 0.41%", "Drawdown 0.81%", "Drawdown 0.67%", "Drawdown 1.08%", "Drawdown 0.60%", "Drawdown 1.00%", "Drawdown 1.41%", "Drawdown 1.81%", "Drawdown 0.88%", "Drawdown 1.33%", "Drawdown 1.78%", "Drawdown 2.18%", "Drawdown 2.58%", "Drawdown 2.46%", "Drawdown 2.92%", "Drawdown 2.26%", "Drawdown 2.96%", "Drawdown 2.84%", "Drawdown 3.32%", "Drawdown 3.73%", "Drawdown 4.14%", "Drawdown 3.90%", "Drawdown 3.43%", "Drawdown 3.31%", "Drawdown 2.84%", "Drawdown 3.26%", "Drawdown 2.78%", "Drawdown 2.84%", "Drawdown 2.72%", "Drawdown 2.45%", "Drawdown 3.00%", "Drawdown 3.90%", "Drawdown 4.60%", "Drawdown 5.21%", "Drawdown 5.70%", "Drawdown 5.58%", "Drawdown 5.46%", "Drawdown 6.01%", "Drawdown 5.56%", "Drawdown 5.40%", "Drawdown 5.88%", "Drawdown 5.52%", "Drawdown 5.95%", "Drawdown 6.35%", "Drawdown 6.77%", "Drawdown 6.30%", "Drawdown 6.72%", "Drawdown 6.14%", "Drawdown 5.82%", "Drawdown 6.22%", "Drawdown 5.66%", "Drawdown 5.52%", "Drawdown 5.93%", "Drawdown 6.33%", "Drawdown 5.96%", "Drawdown 6.82%", "Drawdown 7.23%", "Drawdown 6.89%", "Drawdown 7.29%", "Drawdown 7.71%", "Drawdown 8.30%", "Drawdown 7.76%", "Drawdown 7.65%", "Drawdown 8.06%", "Drawdown 7.42%", "Drawdown 7.82%"]}, "mo": {"kind": "cols", "label": ["2023-02", "2023-03", "2023-04", "2023-06", "2023-07", "2023-10", "2023-11", "2023-12", "2024-01", "2024-02", "2024-03", "2024-04", "2024-05", "2024-06", "2024-07", "2024-09", "2024-10", "2024-11", "2024-12"], "text": ["+0.39 USDT<br>7 operaciones", "+0.24 USDT<br>3 operaciones", "-0.01 USDT<br>8 operaciones", "+0.03 USDT<br>2 operaciones", "+0.04 USDT<br>6 operaciones", "-0.17 USDT<br>1 operaciones", "+0.44 USDT<br>10 operaciones", "-0.68 USDT<br>12 operaciones", "-0.36 USDT<br>5 operaciones", "+0.23 USDT<br>8 operaciones", "-1.16 USDT<br>9 operaciones", "-0.18 USDT<br>2 operaciones", "+0.02 USDT<br>5 operaciones", "-0.34 USDT<br>2 operaciones", "+0.26 USDT<br>3 operaciones", "-0.03 USDT<br>2 operaciones", "+0.29 USDT<br>2 operaciones", "-0.73 USDT<br>7 operaciones", "-0.22 USDT<br>7 operaciones"]}, "hi": {"kind": "cols", "label": ["-3.8% a -3.3%", "-3.3% a -2.8%", "-2.8% a -2.3%", "-2.3% a -1.8%", "-1.8% a -1.3%", "-1.3% a -0.8%", "-0.8% a -0.3%", "-0.3% a +0.3%", "+0.3% a +0.8%", "+0.8% a +1.3%", "+1.3% a +1.8%", "+1.8% a +2.3%", "+2.3% a +2.8%", "+2.8% a +3.3%", "+3.3% a +3.8%"], "text": ["2 operaciones", "2 operaciones", "4 operaciones", "13 operaciones", "28 operaciones", "0 operaciones", "1 operaciones", "0 operaciones", "16 operaciones", "5 operaciones", "8 operaciones", "14 operaciones", "6 operaciones", "1 operaciones", "1 operaciones"]}}</script>
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('theme');
+  function cur(){ return root.getAttribute('data-theme') ||
+    (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'); }
+  function paint(){ btn.textContent = cur()==='dark' ? 'Tema claro' : 'Tema oscuro'; }
+  btn.addEventListener('click',function(){
+    root.setAttribute('data-theme', cur()==='dark'?'light':'dark'); paint();
+  });
+  paint();
+
+  var tip=document.getElementById('tip');
+  function show(html,x,y){
+    tip.innerHTML=html; tip.classList.add('on');
+    var r=tip.getBoundingClientRect();
+    var left=Math.min(x+14, innerWidth-r.width-8);
+    var top=Math.max(8, y-r.height-14);
+    tip.style.left=left+'px'; tip.style.top=top+'px';
+  }
+  function hide(){ tip.classList.remove('on'); }
+
+  var DATA=JSON.parse(document.getElementById('chartdata').textContent);
+
+  // --- Series temporales: crosshair + punto mas cercano en X ---
+  document.querySelectorAll('svg[data-chart]').forEach(function(svg){
+    var id=svg.getAttribute('data-chart'), d=DATA[id];
+    if(!d) return;
+
+    if(d.kind==='series'){
+      var zone=svg.querySelector('.hoverzone'),
+          layer=svg.querySelector('.hoverlayer'),
+          cross=svg.querySelector('.crosshair'),
+          hdot=svg.querySelector('.hoverdot');
+      if(!zone) return;
+      function vb(e){
+        var r=svg.getBoundingClientRect(), box=svg.viewBox.baseVal;
+        return (e.clientX-r.left)/r.width*box.width;
+      }
+      function move(e){
+        var x=vb(e), best=0, bd=1e9;
+        for(var i=0;i<d.px.length;i++){
+          var dist=Math.abs(d.px[i]-x);
+          if(dist<bd){bd=dist;best=i;}
+        }
+        layer.classList.add('on');
+        cross.setAttribute('x1',d.px[best]); cross.setAttribute('x2',d.px[best]);
+        hdot.setAttribute('cx',d.px[best]); hdot.setAttribute('cy',d.py[best]);
+        show('<b>'+d.label[best]+'</b><br>'+d.text[best], e.clientX, e.clientY);
+      }
+      zone.addEventListener('mousemove',move);
+      zone.addEventListener('mouseleave',function(){layer.classList.remove('on');hide();});
+    }
+
+    if(d.kind==='cols'){
+      svg.querySelectorAll('.barhit').forEach(function(hit){
+        var i=+hit.getAttribute('data-i');
+        hit.addEventListener('mousemove',function(e){
+          show('<b>'+d.label[i]+'</b><br>'+d.text[i], e.clientX, e.clientY);
+        });
+        hit.addEventListener('mouseleave',hide);
+      });
+    }
+  });
+})();
+</script>
+</body>
+</html>
