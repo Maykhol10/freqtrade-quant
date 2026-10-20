@@ -11,9 +11,14 @@ OUT_SAMPLE := 20250101-
 
 COMMON := --config $(CONFIG) --strategy $(STRAT) --enable-protections --cache none
 
+# report.py usa solo la libreria estandar: corre con el python del sistema,
+# no necesita el contenedor ni pip install
+PY := python3
+
 .PHONY: help install preflight verify pull download download-detail \
         audit lookahead recursive backtest-in backtest-out stress \
         benchmark-in benchmark-out walkforward analysis hyperopt \
+        dashboard report-html report-html-oos \
         up down logs restart report watchdog backup \
         cron-install cron-remove cron-show systemd-install clean-db
 
@@ -38,6 +43,7 @@ help:
 	@echo "  make benchmark-in     Buy & hold BTC, mismo periodo"
 	@echo "  make analysis         Desglose por exit_tag"
 	@echo "  make hyperopt         Hyperopt (solo in-sample, 3 parametros)"
+	@echo "  make dashboard        Dashboard HTML -> docs/report.html"
 	@echo "  make backtest-out     Out-of-sample $(OUT_SAMPLE)  <- UNA sola vez"
 	@echo "  make benchmark-out    Buy & hold BTC, out-of-sample"
 	@echo "  make walkforward      6 ventanas semestrales"
@@ -131,12 +137,14 @@ stress:
 benchmark-in:
 	$(FT) backtesting --config $(CONFIG) --strategy BuyAndHoldBTC \
 		--pairs BTC/USDT --max-open-trades 1 --stake-amount unlimited \
-		--timerange $(IN_SAMPLE) --cache none
+		--timerange $(IN_SAMPLE) --cache none \
+		--export trades --export-filename user_data/backtest_results/buyhold_in.json
 
 benchmark-out:
 	$(FT) backtesting --config $(CONFIG) --strategy BuyAndHoldBTC \
 		--pairs BTC/USDT --max-open-trades 1 --stake-amount unlimited \
-		--timerange $(OUT_SAMPLE) --cache none
+		--timerange $(OUT_SAMPLE) --cache none \
+		--export trades --export-filename user_data/backtest_results/buyhold_out.json
 
 walkforward:
 	@for R in 20230201-20230801 20230801-20240201 20240201-20240801 \
@@ -149,6 +157,26 @@ walkforward:
 analysis:
 	$(FT) backtesting-analysis --config $(CONFIG) \
 		--analysis-groups 0 1 2 --indicators rsi atr_pct uptrend_4h
+
+# ------------------------------------------------------------------ #
+#  Dashboard HTML (solo libreria estandar de Python, sin pip)
+#  Devuelve codigo 1 si algun criterio bloqueante falla, asi que sirve en CI.
+# ------------------------------------------------------------------ #
+dashboard: report-html
+
+report-html:
+	$(PY) scripts/report.py \
+		--in user_data/backtest_results/in_sample.json \
+		--benchmark user_data/backtest_results/buyhold_in.json \
+		--out docs/report.html \
+		--label "In-sample $(IN_SAMPLE)"
+
+report-html-oos:
+	$(PY) scripts/report.py --oos \
+		--in user_data/backtest_results/out_of_sample.json \
+		--benchmark user_data/backtest_results/buyhold_out.json \
+		--out docs/report-oos.html \
+		--label "Out-of-sample $(OUT_SAMPLE)"
 
 hyperopt:
 	@echo ">>> Riesgo de sobreajuste. Solo in-sample. Leer docs/COMANDOS.md seccion 6. <<<"

@@ -36,6 +36,23 @@ construye de verdad es el proceso.
 | **[VALIDACION.md](VALIDACION.md)** | Partición temporal, plantilla de métricas y cómo no engañarse leyéndolas |
 | **[CHECKLIST_REAL.md](CHECKLIST_REAL.md)** | Las 5 condiciones que deben cumplirse antes de usar dinero real |
 
+### Dashboard de análisis
+
+El informe con las métricas, la curva de capital, el drawdown, el desglose
+mensual y el semáforo contra los umbrales se genera desde los resultados del
+backtest:
+
+```bash
+make backtest-in && make benchmark-in
+make dashboard          # -> docs/report.html
+```
+
+Aparecerá en `report.html` junto a esta página. **Todavía no existe: ningún
+backtest se ha ejecutado.** El generador es
+[`scripts/report.py`](https://github.com/Maykhol10/freqtrade-quant/blob/main/scripts/report.py),
+solo librería estándar de Python, y devuelve código de salida 1 si algún
+criterio bloqueante falla — así que sirve tal cual en un script o en CI.
+
 ---
 
 ## La estrategia en una frase

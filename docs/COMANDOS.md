@@ -283,6 +283,66 @@ una con +40%, -15%, +2%, -8%, +1%, aunque la segunda sume más.
 
 ---
 
+## 7b. Dashboard de análisis
+
+La tabla que imprime Freqtrade en la terminal se pierde al cerrar la sesión y no
+compara nada. `scripts/report.py` lee los JSON exportados y genera un informe
+HTML autocontenido.
+
+```bash
+# Requiere los dos exports: la estrategia y el benchmark
+make backtest-in
+make benchmark-in
+make dashboard                      # -> docs/report.html
+
+# Out-of-sample (umbral de 50 operaciones en vez de 100)
+make backtest-out
+make benchmark-out
+make report-html-oos                # -> docs/report-oos.html
+
+# O a mano, con control total
+python3 scripts/report.py \
+  --in user_data/backtest_results/in_sample.json \
+  --benchmark user_data/backtest_results/buyhold_in.json \
+  --out docs/report.html \
+  --label "In-sample 2023-02 -> 2024-12"
+```
+
+Qué contiene:
+
+| Sección | Qué responde |
+|---|---|
+| Figura principal | **Valor esperado por operación** — la única métrica que decide si hay ventaja |
+| Fichas | Operaciones, win rate, profit, drawdown, profit factor, Sharpe, Sortino, CAGR, ganancia/pérdida media, mejor/peor operación |
+| Semáforo | Los 9 criterios de `VALIDACION.md` con PASA / REVISAR / FALLA y la razón |
+| Curva de rentabilidad | Acumulada, operación a operación, con el buy & hold como línea de referencia |
+| Drawdown bajo el agua | Distancia al máximo histórico de capital |
+| Resultado por mes | Si el profit viene de dos meses buenos; y el total **sin** el mejor mes |
+| Distribución por operación | Si la cola izquierda es más larga que la derecha |
+| Por par y por motivo de salida | De dónde sale realmente el dinero |
+
+Detalles que importan:
+
+- **Todas las métricas se calculan desde la lista de operaciones**, no se leen de
+  los campos agregados del JSON. Los nombres de esos campos cambian entre
+  versiones de Freqtrade, y un cálculo propio es auditable.
+- **Solo librería estándar.** Corre con el `python3` del sistema, sin `pip install`
+  y sin entrar al contenedor.
+- **Devuelve código de salida 1** si algún criterio bloqueante falla, así que
+  `make dashboard && echo ok` solo imprime `ok` cuando el semáforo está limpio.
+- El drawdown se mide en los **cierres** de operación, igual que lo hace
+  Freqtrade: las caídas con posición abierta que se recuperan antes de cerrar no
+  aparecen. El drawdown real vivido es algo mayor.
+- Si el benchmark tiene menos de 5 operaciones, su drawdown se marca como **no
+  medible** en vez de publicar un 0% falso. Buy & hold cierra una sola operación,
+  así que su curva de capital tiene un único punto.
+
+El HTML es autocontenido (SVG y CSS en línea, sin dependencias externas), así que
+se puede abrir local, pasar por `scp`, o publicarlo en GitHub Pages junto a la
+documentación.
+
+---
+
 ## 8. Gráficos
 
 ```bash
