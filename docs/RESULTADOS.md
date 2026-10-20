@@ -23,6 +23,33 @@ Informes completos: [report.html](report.html) · [report-trendrider.html](repor
 
 ---
 
+## Veredicto final: no pasa a dinero real
+
+Out-of-sample de TrendRiderV1 (2025-01-01 → 2026-10-20), medido **una sola
+vez**, tras corregir el riesgo con dimensionado al 2% por operación:
+
+| | In-sample | Out-of-sample |
+|---|---|---|
+| Operaciones | 186 | 44 (umbral 50) |
+| Profit total | +192,43% | **−11,39%** |
+| EV por operación | +0,4138 USDT | **−0,1036 USDT** |
+| Win rate | 43,5% | 38,6% |
+| Max drawdown | 16,91% | 15,90% |
+| BTC en el periodo | +811,2% | −13,1% |
+| Semáforo | 9 PASA | **2 PASA / 1 REVISAR / 6 FALLA** |
+
+El win rate solo cayó 4,9 puntos: la señal no se degradó. Lo que se derrumbó
+fue el tamaño de las ganancias (+5,64% → −1,68% por operación). Sin tendencia,
+las ganadoras dejan de correr. **La estrategia no tiene ventaja independiente
+del régimen**; el +192% del in-sample era en buena parte el mercado alcista.
+
+Perdió menos que comprar y mantener (−11,39% vs −13,07%) con un tercio del
+drawdown, pero perder menos que un benchmark que pierde no es una ventaja.
+
+Informe: [report-trendrider-oos.html](report-trendrider-oos.html)
+
+---
+
 ## TrendRiderV1 — ventaja medible que no justifica el riesgo
 
 In-sample **2019-09-08 → 2025-01-01**, 6 pares en 4h, datos reales de Binance.
