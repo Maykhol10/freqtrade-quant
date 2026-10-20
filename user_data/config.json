@@ -91,6 +91,8 @@
 
     "telegram": {
         "enabled": true,
+        "token": "",
+        "chat_id": "",
         "notification_settings": {
             "status": "silent",
             "warning": "on",
@@ -127,6 +129,8 @@
         "verbosity": "error",
         "enable_openapi": false,
         "CORS_origins": [],
+        "username": "",
+        "password": "",
         "ws_token": ""
     },
 

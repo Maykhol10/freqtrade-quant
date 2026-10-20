@@ -19,4 +19,11 @@ user_data/hyperopt_results/
 user_data/notebooks/.ipynb_checkpoints/
 __pycache__/
 *.pyc
+
+# Entorno virtual del modo nativo (sin Docker)
 .venv/
+venv/
+env/
+
+# Graficos generados
+user_data/plot/

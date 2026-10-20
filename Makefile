@@ -1,7 +1,22 @@
 # Atajos para los comandos de docs/COMANDOS.md
 # Uso:  make help
 
-FT      := docker compose run --rm freqtrade
+# Dos modos de ejecucion:
+#   make <objetivo>              -> Docker (servidor, el modo normal)
+#   make MODE=native <objetivo>  -> entorno virtual local, sin Docker ni WSL
+#
+# El modo nativo existe para poder descargar datos, auditar sesgos, backtestear
+# y generar el dashboard en un PC sin servidor. Para el dry-run de 3-4 semanas
+# hace falta una maquina que no se apague, es decir Docker en una VM.
+MODE ?= docker
+
+ifeq ($(MODE),native)
+  VENV_BIN := $(if $(wildcard .venv/Scripts/freqtrade.exe),.venv/Scripts,.venv/bin)
+  FT       := $(VENV_BIN)/freqtrade
+else
+  FT       := docker compose run --rm freqtrade
+endif
+
 CONFIG  := user_data/config.json
 STRAT   := TrendPullbackV1
 PAIRS   := BTC/USDT ETH/USDT
@@ -11,9 +26,9 @@ OUT_SAMPLE := 20250101-
 
 COMMON := --config $(CONFIG) --strategy $(STRAT) --enable-protections --cache none
 
-# report.py usa solo la libreria estandar: corre con el python del sistema,
+# report.py usa solo la libreria estandar: corre con cualquier python >= 3.9,
 # no necesita el contenedor ni pip install
-PY := python3
+PY := $(if $(filter native,$(MODE)),$(VENV_BIN)/python,python3)
 
 .PHONY: help install preflight verify pull download download-detail \
         audit lookahead recursive backtest-in backtest-out stress \
@@ -23,6 +38,9 @@ PY := python3
         cron-install cron-remove cron-show systemd-install clean-db
 
 help:
+	@echo "Modo actual: $(MODE)   (añade MODE=native para correr sin Docker)"
+	@echo "  comando freqtrade: $(FT)"
+	@echo ""
 	@echo "Servidor"
 	@echo "  make install          Bootstrap: Docker, .env, permisos, imagen"
 	@echo "  make verify           Comprueba que las estrategias cargan"
@@ -199,6 +217,15 @@ logs:
 
 restart:
 	docker compose restart
+
+# Dry-run local, sin Docker. FreqUI queda en http://localhost:8080 sin necesidad
+# de tunel SSH, porque ya estas en la maquina. Se detiene con Ctrl-C y, claro,
+# muere cuando apagas o suspendes el PC: no sirve para las 3-4 semanas seguidas
+# que pide la checklist, pero si para ver el bot funcionando de verdad.
+trade-native:
+	$(VENV_BIN)/freqtrade trade --config $(CONFIG) --strategy $(STRAT) \
+		--db-url sqlite:///user_data/tradesv3.dryrun.sqlite \
+		--logfile user_data/logs/freqtrade.log
 
 report:
 	./scripts/daily_report.sh

@@ -40,7 +40,8 @@ from typing import Optional
 import talib.abstract as ta
 from pandas import DataFrame
 
-import freqtrade.vendor.qtpylib.indicators as qtpylib
+from technical import qtpylib   # freqtrade.vendor.qtpylib esta deprecado
+
 from freqtrade.exchange import timeframe_to_prev_date
 from freqtrade.persistence import Trade
 from freqtrade.strategy import (

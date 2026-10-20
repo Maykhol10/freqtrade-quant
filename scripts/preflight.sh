@@ -160,12 +160,21 @@ if command -v jq >/dev/null 2>&1 && [[ -f user_data/config.json ]]; then
     fail "capital suficiente" "necesita ${NEED} USDT y solo hay ${WALLET}"
   fi
 
-  # Claves de Binance vacias en config.json (deben vivir en .env)
-  KEYLEN=$(jq -r '.exchange.key | length' user_data/config.json)
-  if [[ "$KEYLEN" == "0" ]]; then
-    pass "sin claves en config.json" "los secretos van en .env"
+  # Secretos vacios en config.json: todos deben vivir en .env.
+  # Las claves existen como placeholder porque el schema de Freqtrade las exige,
+  # pero su valor tiene que llegar por variable de entorno.
+  LEAKED=$(jq -r '
+    [ {k:"exchange.key",        v:(.exchange.key        // "")},
+      {k:"exchange.secret",     v:(.exchange.secret     // "")},
+      {k:"telegram.token",      v:(.telegram.token      // "")},
+      {k:"telegram.chat_id",    v:(.telegram.chat_id    // "")},
+      {k:"api_server.password", v:(.api_server.password // "")},
+      {k:"api_server.ws_token", v:(.api_server.ws_token // "")} ]
+    | map(select(.v != "")) | map(.k) | join(", ")' user_data/config.json)
+  if [[ -z "$LEAKED" ]]; then
+    pass "sin secretos en config.json" "todos los valores llegan por .env"
   else
-    fail "sin claves en config.json" "hay una API key en el JSON versionado"
+    fail "sin secretos en config.json" "con valor en el JSON versionado: $LEAKED"
   fi
 else
   fail "config.json legible" "falta jq o el archivo"
