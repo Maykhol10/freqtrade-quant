@@ -23,6 +23,31 @@ Informes completos: [report.html](report.html) · [report-trendrider.html](repor
 
 ---
 
+## Prueba hacia adelante en curso
+
+El histórico ya está gastado: 2025-2026 se usó como out-of-sample, así que
+cualquier estrategia ajustada ahora mirando ese periodo estaría sobreajustada.
+La única validación honesta que queda es medir hacia adelante.
+
+| | |
+|---|---|
+| Inicio | **2026-10-20** |
+| Revisión | **~2027-01-20** (3 meses) |
+| Estrategia | TrendRiderV1, **sin modificar** |
+| Modo | dry-run: precios en vivo de la API pública de Binance, órdenes simuladas |
+| Capital simulado | 40 USDT |
+| Base de datos | `user_data/tradesv3.trendrider.dryrun.sqlite` (local, no versionada) |
+
+Reglas:
+
+1. No se toca la estrategia durante la prueba.
+2. Criterio de éxito fijado de antemano: valor esperado por operación > 0 con
+   un número suficiente de operaciones. Si no, se cierra el proyecto.
+3. Es normal que pase días sin operar: solo entra con tendencia diaria alcista
+   y ruptura de máximos.
+
+---
+
 ## Veredicto final: no pasa a dinero real
 
 Out-of-sample de TrendRiderV1 (2025-01-01 → 2026-10-20), medido **una sola
