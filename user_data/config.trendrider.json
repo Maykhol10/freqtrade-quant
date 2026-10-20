@@ -1,0 +1,36 @@
+{
+    "_comentario": [
+        "Overlay para TrendRiderV1. Freqtrade fusiona varios --config en orden,",
+        "asi que este archivo solo contiene lo que cambia respecto a config.json:",
+        "",
+        "    freqtrade backtesting -c user_data/config.json \\",
+        "                          -c user_data/config.trendrider.json \\",
+        "                          --strategy TrendRiderV1",
+        "",
+        "Por que 6 pares y no 2: con operaciones de dias a semanas, dos pares no",
+        "producen muestra suficiente para concluir nada. docs/VALIDACION.md lista",
+        "anadir pares como la salida valida cuando faltan operaciones -- a",
+        "diferencia de relajar el filtro, que cambia la estrategia.",
+        "",
+        "max_open_trades sube a 4 porque con 6 pares y posiciones largas, 3 slots",
+        "convierten la estrategia en 'el primer par que rompa'. El stake baja a 8",
+        "para que 4 x 8 = 32 siga dentro de los 40 USDT de capital."
+    ],
+
+    "timeframe": "4h",
+    "max_open_trades": 4,
+    "stake_amount": 8,
+
+    "exchange": {
+        "pair_whitelist": [
+            "BTC/USDT",
+            "ETH/USDT",
+            "BNB/USDT",
+            "SOL/USDT",
+            "XRP/USDT",
+            "ADA/USDT"
+        ]
+    },
+
+    "bot_name": "ft_dry_trendrider"
+}

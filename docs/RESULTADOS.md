@@ -3,54 +3,199 @@
 Registro de lo que se ha medido, en orden. Es el documento que responde a la
 pregunta del proyecto: **¿existe una ventaja real después de comisiones?**
 
----
+Dos estrategias medidas. La primera no tiene ventaja. La segunda sí tiene una
+ventaja medible, pero **no supera a comprar y mantener**.
 
-## Veredicto actual: NO hay ventaja
-
-Medido el **2026-10-20**, con datos reales de Binance (33.327 velas de 1h por
-par desde 2023-01-01), Freqtrade 2026.9.
-
-### In-sample 2023-02-07 → 2025-01-01
-
-| | TrendPullbackV1 | Buy & hold BTC |
+| | TrendPullbackV1 | TrendRiderV1 |
 |---|---|---|
-| Operaciones | 101 | 2 |
-| Win rate | 50,5% | 100% |
-| **Profit total** | **−4,84%** (−1,936 USDT) | **+101,05%** (+40,42 USDT) |
-| Max drawdown | 8,30% | 0,00% |
-| Duración media | 14h18 | 693 días |
+| Idea | Reversión a la media | Seguimiento de tendencia |
+| Timeframe | 1h (filtro 4h) | 4h (filtro diario) |
+| Pares | 2 | 6 |
+| Periodo in-sample | 2023-02 → 2025-01 | 2019-09 → 2025-01 |
+| Operaciones | 101 | **194** |
+| Duración media | 14 horas | **15 días** |
+| Profit | **−4,84%** | **+200,70%** |
+| Max drawdown | 8,3% | 22,5% |
+| Semáforo | 2 PASA / 7 FALLA | **6 PASA / 2 REVISAR / 1 FALLA** |
+| Veredicto | Sin ventaja | Ventaja real, pierde contra buy & hold |
 
-### La descomposición que cierra el caso
-
-```
-Profit NETO (lo que queda)         −1,936 USDT
-Comisiones pagadas                 −2,020 USDT   (101 ops × 0,020)
-Profit BRUTO (antes de comisión)   +0,084 USDT
-                                   ───────────
-Valor esperado BRUTO por operación  +0,008%
-Coste de transacción por operación  −0,200%
-
-La comisión es 24x la ventaja bruta de la señal.
-```
-
-**Esto no es "una ventaja pequeña que se la come la comisión".** Eso sería un
-resultado interesante: significaría que hay señal y que el problema es el coste.
-Lo que hay es otra cosa: +0,084 USDT brutos repartidos en 101 operaciones es
-indistinguible de cero. La señal no predice nada.
-
-Para ser rentable, la entrada necesitaría una ventaja bruta superior al **0,20%**
-por operación. Tiene **0,008%**.
-
-### No se ha mirado el out-of-sample, a propósito
-
-2025-2026 sigue intacto. Mirarlo ahora sería quemar la única medición limpia que
-queda para validar una estrategia que **ya falla en el periodo de diseño**. El
-out-of-sample sirve para confirmar una ventaja encontrada in-sample, no para
-buscar una segunda oportunidad.
+Informes completos: [report.html](report.html) · [report-trendrider.html](report-trendrider.html)
 
 ---
 
-## Cómo se llegó aquí
+## TrendRiderV1 — ventaja medible que no justifica el riesgo
+
+In-sample **2019-09-08 → 2025-01-01**, 6 pares en 4h, datos reales de Binance.
+
+| Criterio | Valor | Umbral | |
+|---|---|---|---|
+| Nº de operaciones | 194 | ≥ 100 | PASA |
+| Valor esperado por operación | +0,4138 USDT | > 0 | PASA |
+| Profit factor | 1,82 | > 1,3 | PASA |
+| Max drawdown | 22,5% | < 20% | REVISAR |
+| Sharpe | 0,98 | > 0,5 | PASA |
+| Sortino | 0,68 | > 0,8 | REVISAR |
+| Aguanta sin el mejor mes (2021-02) | +58,90 USDT | > 0 | PASA |
+| Aguanta sin la mejor operación | +66,55 USDT | > 0 | PASA |
+| **Supera a comprar y mantener** | **+200,7% vs +811,2%** | profit o ratio | **FALLA** |
+
+### La comparación que decide
+
+| | TrendRiderV1 | Buy & hold BTC |
+|---|---|---|
+| Profit total | +200,7% | **+811,2%** |
+| CAGR | 23,0% | **51,5%** |
+| Max drawdown | **22,5%** | 76,6% |
+| **Profit / drawdown** | 8,93 | **10,59** |
+| Tiempo expuesto | parcial | 100% |
+
+El drawdown de BTC está medido **sobre el precio diario**, no sobre las
+operaciones: con una sola operación abierta, el drawdown calculado desde
+cierres es 0% por construcción. El fondo real fue el 2022-11-21.
+
+La estrategia gana claramente en riesgo —22,5% frente a 76,6%— pero pierde en
+profit por un factor de 4 y **también pierde en el ratio profit/drawdown**. Por
+la regla del proyecto eso es un FALLA: una estrategia que no supera al
+benchmark ni en profit ni en profit/drawdown no justifica el riesgo operativo,
+la infraestructura ni el tiempo.
+
+Hay un matiz que la regla no captura: un drawdown del 76,6% es soportable en
+una hoja de cálculo y casi nadie lo soporta con dinero real. Pero eso es un
+argumento sobre el comportamiento humano, no una ventaja medida.
+
+### Lo que sí quedó demostrado: el problema del coste se resuelve
+
+| | TrendPullbackV1 | TrendRiderV1 |
+|---|---|---|
+| Duración media | 14 horas | 15 días |
+| Ventaja BRUTA por operación | +0,008% | **+5,38%** |
+| Coste de transacción | 0,200% | 0,200% |
+| **Coste / ventaja** | **24,05x** | **0,04x** |
+
+Con dos puntos de medición, la lección queda establecida:
+
+> Con comisiones del 0,2% ida y vuelta, la frecuencia de operación determina si
+> la ventaja necesaria es alcanzable. No es un detalle de implementación: es la
+> restricción que gobierna el diseño.
+
+### Auditoría anti-sesgo
+
+| Prueba | Resultado |
+|---|---|
+| `lookahead-analysis` de Freqtrade | **No concluyente** — "too few trades caught" incluso con 194 operaciones y `--targeted-trade-amount 120`. Recorta el periodo y `startup_candle_count = 1500` se come la ventana |
+| **`bias_check.py`** (truncamiento) | **Sin sesgo** — 6 pares × 14 indicadores × 8 cortes |
+| **Control negativo** | **Detecta el sesgo** — un `shift(-1)` deliberado cazado en 8/8 cortes |
+| `recursive-analysis` | **PASA** — `ema200_1d` converge a 0,000% en 1500 velas |
+
+`scripts/bias_check.py` se escribió porque la herramienta de Freqtrade no puede
+auditar esta estrategia, y quedarse sin auditoría no era opción. Hace la
+comprobación que *es* la definición de lookahead: calcula los indicadores con
+la serie completa, los recalcula con la serie **cortada** en el instante *t*, y
+exige que el valor en *t* sea idéntico. Si cambia, el cálculo original usaba
+datos posteriores.
+
+El detalle que la hace válida: corta **también la serie diaria**. La primera
+versión solo truncaba las velas de 4h, y la estrategia pedía el diario al
+`DataProvider`, que le devolvía el histórico completo. Esa versión habría dado
+OK sin probar nada. Por eso el control negativo no es opcional: **una prueba
+que no puede fallar no es una prueba.**
+
+No cubre `custom_stoploss` ni la simulación de órdenes.
+
+### Riesgo que hay que arreglar antes de cualquier dry-run
+
+Ocho operaciones perdieron el 24% cada una:
+
+| Motivo de salida | Salidas | Profit medio | Total |
+|---|---|---|---|
+| `trailing_stop_loss` | 184 | +6,56% | +240,5% |
+| **`stop_loss`** (tope del 25%) | **8** | **−24,23%** | **−38,3%** |
+| `force_exit` | 2 | −3,83% | −1,5% |
+
+Esas 8 operaciones se comieron 15,3 USDT: el 38% de una cuenta de 40. El
+`STOP_CAP = 0.25` es demasiado ancho para este capital. Con 4 posiciones
+abiertas, un racimo de esos stops en la misma semana haría mucho daño. Es un
+parámetro de **riesgo**, no de rentabilidad: hay que estrecharlo por
+supervivencia, no por optimizar el backtest.
+
+### Grados de libertad consumidos
+
+| # | Decisión | Sobre qué | Coste |
+|---|---|---|---|
+| 1 | Escala temporal del stop: ATR de 4h → ATR diario | Medición del ATR, no de rentabilidad | Bajo |
+
+Una sola decisión, tomada midiendo que 3×ATR de 4h da un stop del 4,6% que se
+toca en horas, frente al 12% del ATR diario. No se probaron valores buscando
+el mejor resultado.
+
+`hyperopt` nunca se corrió. Los parámetros siguen en sus valores de diseño
+(`breakout_window=30`, `atr_mult=3.0`, `min_atr_pct=0.010`).
+
+### El periodo in-sample fue excepcionalmente favorable
+
+2019-09 → 2025-01 contiene dos mercados alcistas enormes. BTC pasó de ~$10.400
+a ~$94.000. El "Market change" medio de los 6 pares fue **+2.395%**. Cualquier
+estrategia long-only va a parecer buena ahí, y el +200,7% está muy por debajo
+de la media del mercado.
+
+**El out-of-sample 2025-01 → hoy es, en cambio, bajista: BTC −13,4% con un 53%
+de drawdown.** Eso lo convierte en la prueba ideal de la hipótesis que el
+in-sample no puede responder: ¿el filtro de tendencia diaria mantiene la
+estrategia fuera del mercado cuando no hay tendencia?
+
+Medir el precio de BTC en ese periodo no consume el out-of-sample. Correr la
+estrategia sobre él, sí. Sigue sin usarse.
+
+---
+
+## Tres fallos silenciosos que produjeron números creíbles y falsos
+
+Es el hallazgo más transferible del proyecto. Ninguno dio error: todos dieron
+resultados.
+
+### 1. `config.json` sobreescribió el timeframe de la estrategia
+
+`TrendRiderV1` declara `timeframe = "4h"`. `config.json` fija `"timeframe": "1h"`
+para la otra estrategia, y **el config gana**. La estrategia corrió en velas de
+1h, con 2 pares en vez de 6 (los únicos con datos de 1h) y 22 meses en vez de
+63 — y produjo una tabla perfectamente plausible: 25 operaciones, +5,77%. Sin
+mirar la fecha de la primera operación, esos números habrían pasado por
+válidos.
+
+**Regla:** verificar la línea `Backtested X -> Y` del encabezado antes de leer
+cualquier métrica. Si la estrategia declara un timeframe distinto al del
+config, usar un overlay (`-c base.json -c overlay.json`) o `--timeframe`.
+
+### 2. El Sharpe estaba inflado 4x
+
+`report.py` construía la serie de retornos diarios **solo con los días que
+tenían cierre de operación** y la anualizaba con √365. Con 194 operaciones en
+1927 días, solo 126 días (7%) tenían cierre: el Sharpe salía **3,88** en vez
+de **0,98**.
+
+Un Sharpe de 3,88 describe una estrategia de primer nivel mundial. 0,98 es una
+estrategia decente. La diferencia entre esos dos números es la diferencia
+entre poner dinero y no ponerlo.
+
+**Regla:** los días planos también son días. Diluyen la media y bajan el
+ratio, que es exactamente lo que debe pasar en una estrategia de baja
+frecuencia.
+
+### 3. El benchmark podía ser de otro periodo
+
+`report.py` busca el benchmark por nombre de estrategia y coge el más
+reciente. Al medir `TrendPullbackV1` (2023-2024) agarró el buy & hold de
+2019-2025 (+785%) en vez del de su propio periodo (+307%), y la tabla salía
+creíble con los números equivocados.
+
+**Corregido:** ahora compara los periodos y avisa si el desfase supera el 10%
+del span, tanto en la terminal como dentro del informe. La comparación usa la
+fecha de **apertura** de la primera operación, porque un buy & hold de una
+sola operación tiene la misma fecha de apertura y cierre.
+
+---
+
+## TrendPullbackV1 — cómo se llegó al veredicto de "sin ventaja"
 
 Tres fallos, cada uno descubierto solo al ejecutar el código. El orden importa:
 cada corrección destapó el siguiente problema.
@@ -131,7 +276,7 @@ contradice la entrada — y B tiene un número. Se prefiere la razón.
 
 ---
 
-## Grados de libertad consumidos
+### Grados de libertad consumidos (TrendPullbackV1)
 
 Llevar la cuenta es lo que separa una validación de un ejercicio de confirmación.
 
@@ -148,7 +293,7 @@ Nunca se corrió `hyperopt`. Los parámetros siguen en sus valores de diseño
 
 ---
 
-## Qué NO prueba este resultado
+## Qué NO prueban estos resultados
 
 - **No prueba que el trading sistemático no funcione.** Prueba que *esta* regla,
   en *estos* dos pares, en *este* timeframe, durante *este* periodo, no tiene

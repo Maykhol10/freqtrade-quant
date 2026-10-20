@@ -27,7 +27,7 @@ import math
 import os
 import sys
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # ---------------------------------------------------------------- #
 #  Paleta
@@ -222,6 +222,10 @@ def compute(result, starting_balance_override=None):
         "avg_mins": sum(r["mins"] for r in rows) / n if n else 0.0,
         "first": rows[0]["close"],
         "last": rows[-1]["close"],
+        # Apertura de la primera operacion: es la que marca el inicio real del
+        # periodo cubierto. Para un buy & hold de una sola operacion, la fecha
+        # de cierre no dice nada del inicio.
+        "open_first": min((r["open"] for r in rows if r["open"]), default=rows[0]["close"]),
         "timeframe": result.get("timeframe", "?"),
         "max_open_trades": result.get("max_open_trades", "?"),
         "stake": result.get("stake_amount", "?"),
@@ -251,8 +255,19 @@ def compute(result, starting_balance_override=None):
     m["max_dd_abs"] = max_dd_abs
 
     # ---------- Retornos diarios -> Sharpe y Sortino ----------
-    # Se agrupa el P/L por dia de cierre y se divide por el capital al abrir
-    # ese dia. Anualizado con sqrt(365) porque el cripto opera todos los dias.
+    # La serie se construye sobre TODO el calendario, con retorno 0 en los dias
+    # sin cierres. Es la parte que importa:
+    #
+    # Una version anterior solo incluia los dias CON cierre de operacion y
+    # anualizaba con sqrt(365). Con 194 operaciones en 1927 dias, solo 126 dias
+    # (7%) tenian cierre, asi que anualizaba una serie de 126 observaciones como
+    # si fuera diaria: el Sharpe salia 3.88 en vez de 0.98, inflado ~4x. Un
+    # Sharpe de 3.88 describe una estrategia de primer nivel mundial; 0.98 es
+    # una estrategia decente. La diferencia entre esos dos numeros es la
+    # diferencia entre poner dinero y no ponerlo.
+    #
+    # Los dias planos tambien son dias: diluyen la media y bajan el ratio, que
+    # es exactamente lo que debe pasar en una estrategia de baja frecuencia.
     by_day = {}
     for r in rows:
         by_day.setdefault(r["close"].date(), 0.0)
@@ -260,10 +275,13 @@ def compute(result, starting_balance_override=None):
 
     daily = []
     running = start_bal
-    for day in sorted(by_day):
-        pnl = by_day[day]
+    day = rows[0]["close"].date()
+    last_day = rows[-1]["close"].date()
+    while day <= last_day:
+        pnl = by_day.get(day, 0.0)
         daily.append(pnl / running if running else 0.0)
         running += pnl
+        day += timedelta(days=1)
 
     def stdev(xs):
         if len(xs) < 2:
@@ -279,12 +297,21 @@ def compute(result, starting_balance_override=None):
 
     m["sharpe"] = (mu / sd * ann) if sd else 0.0
     m["sortino"] = (mu / sd_down * ann) if sd_down else 0.0
-    m["trading_days"] = len(daily)
+    m["calendar_days"] = len(daily)
+    m["trading_days"] = len(by_day)
 
     span_days = max((m["last"] - m["first"]).days, 1)
     m["span_days"] = span_days
     final = start_bal + m["profit_abs"]
-    m["cagr"] = ((final / start_bal) ** (365.0 / span_days) - 1) if final > 0 and start_bal else -1.0
+    # CAGR: solo tiene sentido con un periodo razonable. Con una sola operacion
+    # (el benchmark) span_days es 1 y la extrapolacion a 365 desborda el float,
+    # ademas de no significar nada.
+    m["cagr"] = None
+    if start_bal and final > 0 and span_days >= 30:
+        try:
+            m["cagr"] = (final / start_bal) ** (365.0 / span_days) - 1
+        except OverflowError:
+            m["cagr"] = None
     m["trades_per_day"] = n / span_days
 
     # ---------- Agrupaciones ----------
@@ -953,6 +980,13 @@ def render(m, bench, checks, meta):
              ["Operaciones", f'{m["n"]}', f'{bench["n"]}'],
              ["Tiempo expuesto", "parcial", "100%"]],
             numcols=(1, 2))
+        if bench.get("desfasado"):
+            comp += ('<p class="sub" style="margin-top:12px"><strong>AVISO: el '
+                     'benchmark cubre un periodo distinto</strong> '
+                     f'({esc(bench["periodo"])}) al de la estrategia. La '
+                     'comparacion de esta tabla NO es valida. Regenera el '
+                     'informe pasando el benchmark del mismo periodo con '
+                     '<code>--benchmark</code>.</p>')
         if not bench["dd_medible"]:
             comp += ('<p class="sub" style="margin-top:12px">El buy &amp; hold cierra '
                      'una sola operacion, asi que su curva de capital tiene un unico '
@@ -1023,7 +1057,7 @@ def render(m, bench, checks, meta):
     <h2>Periodo</h2>
     <p class="sub">
       {esc(m['first'].strftime('%Y-%m-%d'))} &rarr; {esc(m['last'].strftime('%Y-%m-%d'))}<br>
-      {m['span_days']} dias · {m['trading_days']} con operaciones<br>
+      {m['span_days']} dias · {m['trading_days']} con cierres ({m["trading_days"]/max(m["calendar_days"],1)*100:.0f}%)<br>
       {m['trades_per_day']:.2f} operaciones/dia<br>
       duracion media {m['avg_mins']/60:.1f} h<br>
       capital inicial {m['start_bal']:.2f} USDT
@@ -1037,9 +1071,9 @@ def render(m, bench, checks, meta):
   {tile("Profit total", fmt_pct(m['profit_pct']), f"{m['profit_abs']:+.2f} USDT")}
   {tile("Max drawdown", f"{m['max_dd']*100:.1f}%", f"{m['max_dd_abs']:.2f} USDT", dd_cls)}
   {tile("Profit factor", ("inf" if m['profit_factor']==float('inf') else f"{m['profit_factor']:.2f}"), "ganancias / perdidas brutas")}
-  {tile("Sharpe", f"{m['sharpe']:.2f}", "anualizado, retornos diarios")}
-  {tile("Sortino", f"{m['sortino']:.2f}", "solo penaliza caidas")}
-  {tile("CAGR", fmt_pct(m['cagr']), "extrapolado del periodo")}
+  {tile("Sharpe", f"{m['sharpe']:.2f}", "diario sobre el calendario completo")}
+  {tile("Sortino", f"{m['sortino']:.2f}", "idem, solo penaliza caidas")}
+  {tile("CAGR", (fmt_pct(m['cagr']) if m['cagr'] is not None else "n/d"), "extrapolado del periodo")}
 </div>
 
 <div class="tiles">
@@ -1170,6 +1204,10 @@ def main():
                     help="Resultado del benchmark (.zip o .json)")
     ap.add_argument("--benchmark-strategy", default="BuyAndHoldBTC",
                     help="Estrategia del benchmark (por defecto BuyAndHoldBTC)")
+    ap.add_argument("--benchmark-drawdown", type=float, default=None,
+                    help="Max drawdown REAL del benchmark en %% (ej: 76.6). El "
+                         "calculado desde operaciones es 0 por construccion "
+                         "cuando el benchmark cierra una sola operacion.")
     ap.add_argument("--no-benchmark", action="store_true",
                     help="No buscar benchmark automaticamente")
     ap.add_argument("--out", default="docs/report.html", help="HTML de salida")
@@ -1206,6 +1244,25 @@ def main():
             raise SystemExit(f"ERROR: no existe el benchmark {bench_src}")
         _, bres = load_result(bench_src, args.benchmark_strategy)
         bm = compute(bres, args.starting_balance)
+
+        # Salvaguarda: comparar periodos distintos invalida la comparacion.
+        # El benchmark se busca automaticamente por nombre de estrategia, asi
+        # que es facil agarrar el de otro periodo sin darse cuenta -- y la tabla
+        # saldria perfectamente creible con los numeros equivocados.
+        desfase = max(abs((bm["open_first"] - m["open_first"]).days),
+                      abs((bm["last"] - m["last"]).days))
+        if desfase > max(m["span_days"] * 0.10, 30):
+            print(f"  AVISO: el benchmark cubre "
+                  f"{bm['open_first'].date()} -> {bm['last'].date()} y la "
+                  f"estrategia {m['open_first'].date()} -> {m['last'].date()}",
+                  file=sys.stderr)
+            print(f"         desfase de {desfase} dias: la comparacion no es valida.",
+                  file=sys.stderr)
+            print(f"         Pasa el benchmark correcto con --benchmark <archivo>.",
+                  file=sys.stderr)
+            bench_desfasado = True
+        else:
+            bench_desfasado = False
         bench = {
             "profit_pct": bm["profit_pct"],
             "max_dd": bm["max_dd"],
@@ -1213,7 +1270,13 @@ def main():
             # Con muy pocas operaciones la curva de capital tiene demasiados pocos
             # puntos de cierre para que el drawdown signifique algo.
             "dd_medible": bm["n"] >= 5,
+            "desfasado": bench_desfasado,
+            "periodo": f"{bm['open_first'].date()} -> {bm['last'].date()}",
         }
+        if args.benchmark_drawdown is not None:
+            bench["max_dd"] = args.benchmark_drawdown / 100.0
+            bench["dd_medible"] = True
+            bench["dd_externo"] = True
 
     checks = evaluate(m, bench, args.oos)
 

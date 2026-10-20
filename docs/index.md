@@ -7,10 +7,13 @@ title: freqtrade-quant
 Validación cuantitativa de una estrategia de trading cripto en [Freqtrade](https://www.freqtrade.io/).
 Binance **spot**, solo largos, sin apalancamiento.
 
-> **Estado: medido. Veredicto: no hay ventaja.**
-> El backtest in-sample da **−4,84%** frente al **+304%** de comprar y mantener
-> BTC en el mismo periodo. La ventaja bruta de la señal es de 0,008% por
-> operación contra un coste de 0,200%: la comisión es **24 veces** la ventaja.
+> **Estado: dos estrategias medidas.**
+> **TrendPullbackV1** no tiene ventaja: −4,84% in-sample, con una ventaja bruta
+> de 0,008% por operación contra un coste de 0,200% — la comisión es 24 veces
+> la ventaja.
+> **TrendRiderV1** sí tiene ventaja medible: +200,7% con 194 operaciones y
+> 6 de 9 criterios superados, pero **pierde contra comprar y mantener**
+> (+811,2%) incluso ajustando por drawdown.
 > Detalle completo en [RESULTADOS.md](RESULTADOS.md).
 
 [Código fuente en GitHub](https://github.com/Maykhol10/freqtrade-quant){: .btn }
@@ -50,8 +53,9 @@ make backtest-in && make benchmark-in
 make dashboard          # -> docs/report.html
 ```
 
-**[Ver el dashboard del backtest in-sample](report.html)** — ya generado con
-datos reales. El generador es
+Dashboards generados con datos reales:
+**[TrendPullbackV1](report.html)** · **[TrendRiderV1](report-trendrider.html)**.
+El generador es
 [`scripts/report.py`](https://github.com/Maykhol10/freqtrade-quant/blob/main/scripts/report.py),
 solo librería estándar de Python, y devuelve código de salida 1 si algún
 criterio bloqueante falla — así que sirve tal cual en un script o en CI.

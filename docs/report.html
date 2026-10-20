@@ -164,13 +164,13 @@ footer a{color:var(--ink2)}
   <div>
     <h1>Analisis de backtest</h1>
     <p class="sub">TrendPullbackV1 · In-sample 2023-02-07 -&gt; 2025-01-01 · timeframe 1h
-      · generado 2026-10-20 11:52</p>
+      · generado 2026-10-20 12:12</p>
   </div>
   <button id="theme" type="button">Tema oscuro</button>
 </header>
 
 <div class="banner critical">
-  <strong>No hay ventaja demostrada (6 criterios fallan)</strong>
+  <strong>No hay ventaja demostrada (7 criterios fallan)</strong>
   Al menos un criterio bloqueante no se cumple. Volver al diseno, no reoptimizar sobre este mismo periodo: eso solo mide cuanto sobreajustas.
 </div>
 
@@ -187,7 +187,7 @@ footer a{color:var(--ink2)}
     <h2>Periodo</h2>
     <p class="sub">
       2023-02-14 &rarr; 2024-12-15<br>
-      669 dias · 86 con operaciones<br>
+      669 dias · 86 con cierres (13%)<br>
       0.15 operaciones/dia<br>
       duracion media 14.3 h<br>
       capital inicial 40.00 USDT
@@ -201,8 +201,8 @@ footer a{color:var(--ink2)}
   <div class="tile"><span class="k">Profit total</span><span class="v ">-4.8%</span><span class="n">-1.94 USDT</span></div>
   <div class="tile"><span class="k">Max drawdown</span><span class="v ">8.3%</span><span class="n">3.43 USDT</span></div>
   <div class="tile"><span class="k">Profit factor</span><span class="v ">0.79</span><span class="n">ganancias / perdidas brutas</span></div>
-  <div class="tile"><span class="k">Sharpe</span><span class="v ">-2.06</span><span class="n">anualizado, retornos diarios</span></div>
-  <div class="tile"><span class="k">Sortino</span><span class="v ">-4.27</span><span class="n">solo penaliza caidas</span></div>
+  <div class="tile"><span class="k">Sharpe</span><span class="v ">-0.74</span><span class="n">diario sobre el calendario completo</span></div>
+  <div class="tile"><span class="k">Sortino</span><span class="v ">-0.55</span><span class="n">idem, solo penaliza caidas</span></div>
   <div class="tile"><span class="k">CAGR</span><span class="v ">-2.7%</span><span class="n">extrapolado del periodo</span></div>
 </div>
 
@@ -217,7 +217,7 @@ footer a{color:var(--ink2)}
   <h2>Semaforo contra los umbrales</h2>
   <p class="sub">Umbrales de <code>docs/VALIDACION.md</code>. Un solo FALLA es motivo
     suficiente para no avanzar.</p>
-  <table><thead><tr><th class="">Criterio</th><th class="num">Valor</th><th class="">Umbral</th><th class="">Estado</th></tr></thead><tbody><tr><td class="">Numero de operaciones</td><td class="num">101</td><td class="">&gt;= 100</td><td class=""><span class="badge good"><span class="ico">&#10003;</span>PASA</span></td></tr><tr><td class="">Valor esperado por operacion<br><span class="muted">sin ventaja: cada operacion pierde dinero en promedio</span></td><td class="num">-0.0192 USDT</td><td class="">&gt; 0</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Profit factor<br><span class="muted">entre 1.0 y 1.3 la ventaja no sobrevive al slippage</span></td><td class="num">0.79</td><td class="">&gt; 1.3</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Max drawdown</td><td class="num">8.3%</td><td class="">&lt; 20%</td><td class=""><span class="badge good"><span class="ico">&#10003;</span>PASA</span></td></tr><tr><td class="">Sharpe</td><td class="num">-2.06</td><td class="">&gt; 0.5</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Sortino</td><td class="num">-4.27</td><td class="">&gt; 0.8</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Aguanta sin el mejor mes<br><span class="muted">el mejor mes fue 2023-11</span></td><td class="num">-2.38 USDT</td><td class="">&gt; 0</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Aguanta sin la mejor operacion</td><td class="num">-2.32 USDT</td><td class="">&gt; 0</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Supera a comprar y mantener<br><span class="muted">pierde en profit; el drawdown del benchmark no es medible desde una sola operacion, asi que la comparacion por profit/drawdown queda pendiente</span></td><td class="num">-4.8% vs +304.4%</td><td class="">profit o ratio profit/DD</td><td class=""><span class="badge warning"><span class="ico">&#33;</span>REVISAR</span></td></tr></tbody></table>
+  <table><thead><tr><th class="">Criterio</th><th class="num">Valor</th><th class="">Umbral</th><th class="">Estado</th></tr></thead><tbody><tr><td class="">Numero de operaciones</td><td class="num">101</td><td class="">&gt;= 100</td><td class=""><span class="badge good"><span class="ico">&#10003;</span>PASA</span></td></tr><tr><td class="">Valor esperado por operacion<br><span class="muted">sin ventaja: cada operacion pierde dinero en promedio</span></td><td class="num">-0.0192 USDT</td><td class="">&gt; 0</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Profit factor<br><span class="muted">entre 1.0 y 1.3 la ventaja no sobrevive al slippage</span></td><td class="num">0.79</td><td class="">&gt; 1.3</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Max drawdown</td><td class="num">8.3%</td><td class="">&lt; 20%</td><td class=""><span class="badge good"><span class="ico">&#10003;</span>PASA</span></td></tr><tr><td class="">Sharpe</td><td class="num">-0.74</td><td class="">&gt; 0.5</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Sortino</td><td class="num">-0.55</td><td class="">&gt; 0.8</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Aguanta sin el mejor mes<br><span class="muted">el mejor mes fue 2023-11</span></td><td class="num">-2.38 USDT</td><td class="">&gt; 0</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Aguanta sin la mejor operacion</td><td class="num">-2.32 USDT</td><td class="">&gt; 0</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr><tr><td class="">Supera a comprar y mantener<br><span class="muted">pierde en ambos: la estrategia no justifica el riesgo operativo</span></td><td class="num">-4.8% vs +304.4%</td><td class="">profit o ratio profit/DD</td><td class=""><span class="badge critical"><span class="ico">&#10007;</span>FALLA</span></td></tr></tbody></table>
 </div>
 
 <div class="card">
@@ -455,7 +455,7 @@ footer a{color:var(--ink2)}
 
 <div class="card">
   <h2>Comparativa contra comprar y mantener</h2>
-  <table><thead><tr><th class=""></th><th class="num">TrendPullbackV1</th><th class="num">Buy &amp; hold BTC</th></tr></thead><tbody><tr><td class="">Profit total</td><td class="num">-4.8%</td><td class="num">+304.4%</td></tr><tr><td class="">Max drawdown</td><td class="num">8.3%</td><td class="num"><span class="muted">no medible</span></td></tr><tr><td class="">Profit / drawdown</td><td class="num">-0.58</td><td class="num"><span class="muted">&mdash;</span></td></tr><tr><td class="">Operaciones</td><td class="num">101</td><td class="num">1</td></tr><tr><td class="">Tiempo expuesto</td><td class="num">parcial</td><td class="num">100%</td></tr></tbody></table><p class="sub" style="margin-top:12px">El buy &amp; hold cierra una sola operacion, asi que su curva de capital tiene un unico punto de cierre y el drawdown calculado saldria 0% <em>por construccion</em>, no porque no lo haya tenido. Se marca como no medible en vez de publicar un cero falso: para medirlo de verdad hace falta la serie de precios, no la lista de operaciones.</p>
+  <table><thead><tr><th class=""></th><th class="num">TrendPullbackV1</th><th class="num">Buy &amp; hold BTC</th></tr></thead><tbody><tr><td class="">Profit total</td><td class="num">-4.8%</td><td class="num">+304.4%</td></tr><tr><td class="">Max drawdown</td><td class="num">8.3%</td><td class="num">26.2%</td></tr><tr><td class="">Profit / drawdown</td><td class="num">-0.58</td><td class="num">11.62</td></tr><tr><td class="">Operaciones</td><td class="num">101</td><td class="num">1</td></tr><tr><td class="">Tiempo expuesto</td><td class="num">parcial</td><td class="num">100%</td></tr></tbody></table>
 </div>
 
 <div class="card">
