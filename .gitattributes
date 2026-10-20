@@ -1,0 +1,15 @@
+# El proyecto se despliega en Linux dentro de Docker.
+# Forzar LF evita que un clon en Windows y uno en Linux difieran, y que
+# bash falle con "bad interpreter: ^M" o make con "missing separator".
+* text=auto eol=lf
+
+*.sh      text eol=lf
+Makefile  text eol=lf
+*.py      text eol=lf
+*.json    text eol=lf
+*.yml     text eol=lf
+*.md      text eol=lf
+
+# Binarios de datos de mercado
+*.feather binary
+*.sqlite  binary
