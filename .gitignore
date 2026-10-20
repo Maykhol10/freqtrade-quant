@@ -1,0 +1,22 @@
+# Secretos
+.env
+*.env
+!.env.example
+
+# Datos de mercado (pesados, se re-descargan)
+user_data/data/
+user_data/logs/
+*.log
+
+# Resultados y base de datos
+user_data/backtest_results/
+user_data/hyperopt_results/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Notebooks / cache
+user_data/notebooks/.ipynb_checkpoints/
+__pycache__/
+*.pyc
+.venv/

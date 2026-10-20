@@ -1,0 +1,53 @@
+# Freqtrade - Binance SPOT - DRY RUN
+# Servidor: Linux (Azure) + Docker
+# Levantar:  docker compose up -d
+# Logs:      docker compose logs -f
+services:
+  freqtrade:
+    image: freqtradeorg/freqtrade:stable
+    container_name: freqtrade_dry
+    restart: unless-stopped
+
+    # El contenedor corre como ftuser (uid 1000). En el host:
+    #   sudo chown -R 1000:1000 ./user_data
+    volumes:
+      - "./user_data:/freqtrade/user_data"
+
+    # FreqUI/API SOLO en loopback. Nunca expongas 8080 a internet sin proxy+TLS.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    # Secretos: Telegram, claves API y JWT. NUNCA en config.json ni en git.
+    # Freqtrade lee overrides con el patron FREQTRADE__SECCION__CLAVE
+    env_file:
+      - .env
+
+    environment:
+      - TZ=America/Lima
+
+    # Evita que los logs llenen el disco de la VM
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    # Memoria acotada: una VM B1s/B2s no debe morir por el bot
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+    healthcheck:
+      test: ["CMD-SHELL", "freqtrade --version || exit 1"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+    command: >
+      trade
+      --config /freqtrade/user_data/config.json
+      --strategy TrendPullbackV1
+      --logfile /freqtrade/user_data/logs/freqtrade.log
+      --db-url sqlite:////freqtrade/user_data/tradesv3.dryrun.sqlite

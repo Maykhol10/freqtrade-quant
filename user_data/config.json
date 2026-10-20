@@ -1,0 +1,145 @@
+{
+    "$schema": "https://schema.freqtrade.io/schema.json",
+
+    "dry_run": true,
+    "dry_run_wallet": 40,
+
+    "max_open_trades": 3,
+    "stake_currency": "USDT",
+    "stake_amount": 10,
+    "available_capital": 40,
+    "amend_last_stake_amount": false,
+
+    "timeframe": "1h",
+    "fiat_display_currency": "USD",
+
+    "trading_mode": "spot",
+    "margin_mode": "",
+
+    "fee": 0.001,
+
+    "cancel_open_orders_on_exit": false,
+    "process_only_new_candles": true,
+    "use_exit_signal": true,
+    "exit_profit_only": false,
+    "ignore_roi_if_entry_signal": false,
+    "ignore_buying_expired_candle_after": 300,
+
+    "unfilledtimeout": {
+        "entry": 10,
+        "exit": 10,
+        "exit_timeout_count": 0,
+        "unit": "minutes"
+    },
+
+    "entry_pricing": {
+        "price_side": "other",
+        "use_order_book": true,
+        "order_book_top": 1,
+        "price_last_balance": 0.0,
+        "check_depth_of_market": {
+            "enabled": false,
+            "bids_to_ask_delta": 1
+        }
+    },
+
+    "exit_pricing": {
+        "price_side": "other",
+        "use_order_book": true,
+        "order_book_top": 1
+    },
+
+    "order_types": {
+        "entry": "limit",
+        "exit": "limit",
+        "emergency_exit": "market",
+        "force_entry": "market",
+        "force_exit": "market",
+        "stoploss": "market",
+        "stoploss_on_exchange": false,
+        "stoploss_on_exchange_interval": 60
+    },
+
+    "order_time_in_force": {
+        "entry": "GTC",
+        "exit": "GTC"
+    },
+
+    "exchange": {
+        "name": "binance",
+        "key": "",
+        "secret": "",
+        "ccxt_config": {
+            "enableRateLimit": true
+        },
+        "ccxt_async_config": {
+            "enableRateLimit": true,
+            "rateLimit": 200
+        },
+        "pair_whitelist": [
+            "BTC/USDT",
+            "ETH/USDT"
+        ],
+        "pair_blacklist": []
+    },
+
+    "pairlists": [
+        {
+            "method": "StaticPairList"
+        }
+    ],
+
+    "telegram": {
+        "enabled": true,
+        "notification_settings": {
+            "status": "silent",
+            "warning": "on",
+            "startup": "on",
+            "entry": "on",
+            "entry_fill": "on",
+            "entry_cancel": "on",
+            "exit": {
+                "roi": "on",
+                "emergency_exit": "on",
+                "force_exit": "on",
+                "exit_signal": "on",
+                "trailing_stop_loss": "on",
+                "stop_loss": "on",
+                "stoploss_on_exchange": "on",
+                "custom_exit": "on",
+                "partial_exit": "on"
+            },
+            "exit_fill": "on",
+            "protection_trigger": "on",
+            "protection_trigger_global": "on",
+            "strategy_msg": "on",
+            "show_candle": "off"
+        },
+        "balance_dust_level": 0.01,
+        "reload": true,
+        "allow_custom_messages": true
+    },
+
+    "api_server": {
+        "enabled": true,
+        "listen_ip_address": "0.0.0.0",
+        "listen_port": 8080,
+        "verbosity": "error",
+        "enable_openapi": false,
+        "CORS_origins": [],
+        "ws_token": ""
+    },
+
+    "bot_name": "ft_dry_trendpullback",
+    "initial_state": "running",
+    "force_entry_enable": false,
+    "internals": {
+        "process_throttle_secs": 5,
+        "heartbeat_interval": 3600
+    },
+
+    "dataformat_ohlcv": "feather",
+    "dataformat_trades": "feather",
+
+    "logfile": "user_data/logs/freqtrade.log"
+}
